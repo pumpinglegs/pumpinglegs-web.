@@ -153,12 +153,11 @@
   function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
   function updateRunner(){
-    // Move faster: ~50 taps ≈ finish line
-    const target = 50;
+    const target = 50; // ~50 taps to finish
     const pct = Math.min(100, (taps/target) * 100);
     runner.style.left = pct + "%";
     phase ^= 1;
-    runner.className = "runner " + (phase ? "run1" : "run2";
+    runner.className = "runner " + (phase ? "run1" : "run2"); // <-- fixed
   }
 
   function tick(){
@@ -187,32 +186,15 @@
     const safe = clamp(taps, 0, 500);
     const payload = { coin_id, taps: safe };
 
-    // Verdict + colors + animation + bigger emoji burst
     const verdictEl = document.getElementById("verdict");
     const fx = document.getElementById("fx");
     let msg = "", color = "#fff", anim = "verdict-pop";
 
-    if (taps <= 10) {
-      msg = "my grandma' can run faster than that!";
-      color = "#ff4d4f"; anim = "verdict-shake";
-      burst(["🦴","🥱","🐢"], 12);
-    } else if (taps <= 20) {
-      msg = "meh... you can do better than that!";
-      color = "#ff9800"; anim = "verdict-pop";
-      burst(["😐","👟"], 12);
-    } else if (taps <= 30) {
-      msg = "that's a real CHAD run";
-      color = "#3aa0ff"; anim = "verdict-pop verdict-glow";
-      burst(["💪","🔥","👟"], 14);
-    } else if (taps <= 40) {
-      msg = "Usein Bolt is proud of you!!!";
-      color = "#a24dff"; anim = "verdict-pop verdict-glow";
-      burst(["🏃‍♂️","💨","⚡️"], 16);
-    } else {
-      msg = "LIGHTING SPEED !!!";
-      color = "#15c26b"; anim = "verdict-pop verdict-glow";
-      burst(["⚡️","🚀","🔥","🏁"], 20);
-    }
+    if (taps <= 10) { msg = "my grandma' can run faster than that!"; color = "#ff4d4f"; anim = "verdict-shake"; burst(["🦴","🥱","🐢"], 12); }
+    else if (taps <= 20) { msg = "meh... you can do better than that!"; color = "#ff9800"; anim = "verdict-pop"; burst(["😐","👟"], 12); }
+    else if (taps <= 30) { msg = "that's a real CHAD run"; color = "#3aa0ff"; anim = "verdict-pop verdict-glow"; burst(["💪","🔥","👟"], 14); }
+    else if (taps <= 40) { msg = "Usein Bolt is proud of you!!!"; color = "#a24dff"; anim = "verdict-pop verdict-glow"; burst(["🏃‍♂️","💨","⚡️"], 16); }
+    else { msg = "LIGHTING SPEED !!!"; color = "#15c26b"; anim = "verdict-pop verdict-glow"; burst(["⚡️","🚀","🔥","🏁"], 20); }
 
     verdictEl.textContent = msg;
     verdictEl.style.display = "block";
@@ -220,13 +202,8 @@
     verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
 
     if(inTelegram && tg.sendData){
-      try {
-        tg.sendData(JSON.stringify(payload));
-        ok.style.display = "block";
-        tapBtn.textContent = "Submitted ✅";
-      } catch(e){
-        tapBtn.textContent = "Error submitting";
-      }
+      try { tg.sendData(JSON.stringify(payload)); ok.style.display = "block"; tapBtn.textContent = "Submitted ✅"; }
+      catch(e){ tapBtn.textContent = "Error submitting"; }
     } else {
       ok.style.display = "block";
       ok.textContent = "Demo result: " + JSON.stringify(payload);
@@ -234,7 +211,7 @@
     }
 
     function burst(symbols, count){
-      const layer = fx;
+      const layer = document.getElementById("fx");
       const rect = layer.getBoundingClientRect();
       for(let i=0;i<count;i++){
         const el = document.createElement("div");
@@ -253,7 +230,7 @@
   }
 
   function handleTap(e){
-    if(e){ e.preventDefault?.(); e.stopPropagation?.(); }
+    e?.preventDefault?.(); e?.stopPropagation?.();
     if(done) return;
     const now = performance.now();
     if(!start){
@@ -280,5 +257,6 @@
   window.addEventListener("beforeunload", () => { if(!done && start){ finish(); } });
 })();
 </script>
+
 </body>
 </html>
