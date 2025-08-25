@@ -20,7 +20,7 @@
   .premium-ad {
     display:flex; align-items:center; justify-content:center; gap:10px;
     margin-bottom:14px; padding:8px 14px; border-radius:14px;
-    background:linear-gradient(90deg, #ff7a00, #ffa24c); color:#fff;
+   background:linear-gradient(90deg, #6a11cb, #b91372);
     font-weight:700; font-size:14px; box-shadow:0 4px 18px rgba(255,122,0,0.35);
   }
   .premium-ad img { height:36px; width:auto; }
@@ -31,7 +31,14 @@
   .track{position:relative; height:92px; margin:14px 0 4px; border-radius:12px; overflow:hidden;
          background:repeating-linear-gradient(90deg, #1c1c25 0 18px, #1a1a21 18px 36px); border:1px solid #2a2a36}
   .runner{position:absolute; top:50%; left:0%; transform:translate(-50%, -50%); font-size:72px; transition: transform .08s linear, left .08s linear}
-  .runner-emoji{display:inline-block; transform: scaleX(-1);} /* flip to face right */
+  ./* Default: no flip (desktop) */
+.runner-emoji { display:inline-block; transform:none; }
+
+/* On mobile (touch devices), flip to face right */
+@media (pointer: coarse) {
+  .runner-emoji { transform:scaleX(-1); }
+}
+
   .run1{ transform: translate(-50%, -50%) translateY(-5px) rotate(-8deg) }
   .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
 
