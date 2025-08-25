@@ -31,18 +31,14 @@
   .track{position:relative; height:92px; margin:14px 0 4px; border-radius:12px; overflow:hidden;
          background:repeating-linear-gradient(90deg, #1c1c25 0 18px, #1a1a21 18px 36px); border:1px solid #2a2a36}
   .runner{position:absolute; top:50%; left:0%; transform:translate(-50%, -50%); font-size:72px; transition: transform .08s linear, left .08s linear}
-  /* Desktop default: flip to face right */
-.runner-emoji { 
-  display:inline-block; 
-  transform: scaleX(-1);
+ /* Default: no flip (desktop) */
+.runner-emoji { display:inline-block; transform:none; }
+
+/* Default: no flipOn mobile (touch devices) */
+@media (pointer: coarse) {
+  .runner-emoji { transform:scaleX(-1); }
 }
 
-/* Mobile (touch devices): DO NOT flip */
-@media (pointer: coarse) {
-  .runner-emoji { 
-    transform: none; 
-  }
-}
 
 
   .run1{ transform: translate(-50%, -50%) translateY(-5px) rotate(-8deg) }
