@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>PumpingLegs — Tap Sprint</title>
 <style>
+.runner-emoji {
+  display:inline-block;
+  transform: scaleX(-1); /* flip horizontally so the leg points right */
+}
   :root{ --bg:#0f0f12; --card:#16161b; --accent:#ff7a00; --accent-2:#ffa24c; --text:#f2f2f5; --muted:#b6b6c1; }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0;background:radial-gradient(1200px 600px at 50% -20%, #1e1e25 0, #0f0f12 60%);}
@@ -93,7 +97,8 @@
   </div>
 
   <div class="track">
-    <div class="runner" id="runner" aria-hidden="true">🦵</div>
+   <div class="runner" id="runner" aria-hidden="true">
+  <span class="runner-emoji">🦵</span>
   </div>
 
   <div id="taps" class="meter">0</div>
