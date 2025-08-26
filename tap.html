@@ -148,6 +148,7 @@
   try { tg && tg.ready && tg.ready(); } catch(e){}
   const params = new URLSearchParams(location.search);
   const coin_id = params.get("coin_id") || "DEMO";
+  const gid = params.get("gid"); // NEW
 
   const tapBtn = document.getElementById("tap");
   const tapsEl = document.getElementById("taps");
@@ -216,7 +217,7 @@
     cpsEl.textContent = cps.toFixed(1);
 
     const safe = clamp(taps, 0, 500);
-    const payload = { coin_id, taps: safe };
+    const payload = { coin_id, gid, taps: safe };  // include gid if present
 
     let msg = "", color = "#fff", anim = "verdict-pop";
     if (taps <= 10) {
