@@ -16,33 +16,25 @@
   .wrap{position:relative; width:min(560px,96vw); background:linear-gradient(180deg,#1a1a21, #141419);
         border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
 
-  /* Premium Ad banner */
-  .premium-ad {
-    display:flex; align-items:center; justify-content:center; gap:10px;
-    margin-bottom:14px; padding:8px 14px; border-radius:14px;
-   background:linear-gradient(90deg, #6a11cb, #b91372);
-    font-weight:700; font-size:14px; box-shadow:0 4px 18px rgba(255,122,0,0.35);
-  }
-  .premium-ad img { height:36px; width:auto; }
-
-  .title{display:flex;gap:10px; align-items:center; justify-content:center; font-weight:800; letter-spacing:.2px}
+  /* Header with logo */
+  .title{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+  .title a{display:inline-block;}
+  .title img.logo{max-height:60px;margin-bottom:6px;}
+  .title-text{font-weight:800; letter-spacing:.2px; font-size:22px;}
   .title .badge{font-size:12px; padding:4px 8px; border-radius:999px; background:#222231; color:var(--muted); border:1px solid #2c2c39}
 
   .track{position:relative; height:92px; margin:14px 0 4px; border-radius:12px; overflow:hidden;
          background:repeating-linear-gradient(90deg, #1c1c25 0 18px, #1a1a21 18px 36px); border:1px solid #2a2a36}
   .runner{position:absolute; top:50%; left:0%; transform:translate(-50%, -50%); font-size:72px; transition: transform .08s linear, left .08s linear}
- /* Default: no flip (desktop) */
-.runner-emoji { display:inline-block; transform:none; }
-
-/* Default: no flipOn mobile (touch devices) */
-@media (pointer: coarse) {
-  .runner-emoji { transform:scaleX(-1); }
-}
-
-
-
   .run1{ transform: translate(-50%, -50%) translateY(-5px) rotate(-8deg) }
   .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
+
+  /* Default: no flip (desktop) */
+.runner-emoji { display:inline-block; transform:none; }
+
+/* Default: no flip On mobile (touch devices) */
+@media (pointer: coarse) {
+  .runner-emoji { transform:scaleX(-1); }
 
   .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
   .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
@@ -79,10 +71,10 @@
     0%{text-shadow:0 0 0 rgba(255,255,255,0)} 50%{text-shadow:0 0 18px rgba(255,255,255,.65)} 100%{text-shadow:0 0 0 rgba(255,255,255,0)}
   }
 
-  /* Emoji/Image burst — bigger on finish */
+  /* Emoji burst */
   .fx-layer { pointer-events:none; position:absolute; inset:0; overflow:hidden; }
   .fx-emoji {
-    position:absolute; font-size:38px; /* bigger */
+    position:absolute; font-size:38px;
     opacity:0; transform: translate(-50%,-50%) scale(.6);
     animation: fxRise 900ms ease-out forwards;
   }
@@ -91,27 +83,27 @@
     20%  { opacity:1; }
     100% { opacity:0; transform:translate(calc(var(--x) + var(--dx)), calc(var(--y) - 140px)) scale(1.25) rotate(25deg); }
   }
-  .fx-img { position:absolute; width:56px; height:56px; object-fit:contain; opacity:0;
-            transform: translate(-50%,-50%) scale(.6); animation: fxRise 1000ms ease-out forwards; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <!-- Premium Ad* banner -->
-  <div class="premium-ad">
-    <img src="https://footcoin.me/wp-content/uploads/2025/05/1746852152907-1024x341.png" alt="Footcoin Logo">
-    <span>Premium Ad*</span>
-  </div>
-
-  <!-- FX layer for emoji/image bursts -->
-  <div class="fx-layer" id="fx"></div>
-
+  <!-- Header with clickable logo -->
   <div class="title">
-    <span style="font-size:26px">🏃‍♂️</span>
-    <div>PumpingLegs</div>
+    <a href="https://footcoin.me" target="_blank">
+      <img
+        src="https://raw.githubusercontent.com/pumpinglegs/pumpinglegs-web./refs/heads/main/logo.png"
+        alt="PumpingLegs Logo"
+        class="logo"
+      />
+    </a>
+    <div class="title-text">PumpingLegs</div>
     <span class="badge">Tap Sprint · 5s</span>
   </div>
 
+  <!-- FX layer for bursts -->
+  <div class="fx-layer" id="fx"></div>
+
+  <!-- Track -->
   <div class="track">
     <div class="runner" id="runner" aria-hidden="true">
       <span class="runner-emoji">🦵</span>
@@ -131,10 +123,10 @@
   </div>
 
   <div class="ok" id="ok">Submitted ✅</div>
-  <div class="footer" id="hint">Keep tapping — fastest legs win!!!</div>
+  <div class="footer" id="hint">🔥 LET’S RUN 🏃‍♂️</div>
   <div class="footer" id="verdict" style="display:none;font-weight:700;"></div>
+  <div class="demo" id="demo">Demo mode</div>
 </div>
-<div class="demo" id="demo">Demo mode</div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
@@ -154,15 +146,16 @@
   const ok = document.getElementById("ok");
   const demo = document.getElementById("demo");
   const runner = document.getElementById("runner");
+  const verdictEl = document.getElementById("verdict");
 
   if(!inTelegram){ demo.style.display = "inline-block"; }
 
-  let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTimes=[], phase=0;
+  let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTimes=[], phase=0, lastTapTime=0;
 
   function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
   function updateRunner(){
-    const target = 50; // ~50 taps to finish
+    const target = 50; // ~50 taps to reach the end
     const pct = Math.min(100, (taps/target) * 100);
     runner.style.left = pct + "%";
     phase ^= 1;
@@ -177,6 +170,24 @@
     fill.style.width = (100 * (1 - s/5)).toFixed(1) + "%";
     if(left <= 0) return finish();
     raf = requestAnimationFrame(tick);
+  }
+
+  function burst(symbols, count){
+    const layer = document.getElementById("fx");
+    const rect = layer.getBoundingClientRect();
+    for(let i=0;i<count;i++){
+      const el = document.createElement("div");
+      el.className = "fx-emoji";
+      el.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+      const x = (rect.width / 2) + (Math.random()*80 - 40);
+      const y = (rect.height / 2) + (Math.random()*30 - 15);
+      const dx = (Math.random()*260 - 130) + "px";
+      el.style.setProperty("--x", x+"px");
+      el.style.setProperty("--y", y+"px");
+      el.style.setProperty("--dx", dx);
+      layer.appendChild(el);
+      setTimeout(()=>{ el.remove(); }, 1000);
+    }
   }
 
   function finish(){
@@ -195,78 +206,54 @@
     const safe = clamp(taps, 0, 500);
     const payload = { coin_id, taps: safe };
 
-    // Verdict + colors + animation + bigger emoji burst
-    const verdictEl = document.getElementById("verdict");
-    const fx = document.getElementById("fx");
     let msg = "", color = "#fff", anim = "verdict-pop";
-
-    if (taps <= 10)       { msg = "my grandma' can run faster than that!"; color = "#ff4d4f"; anim = "verdict-shake";           burst(["🦴","🥱","🐢"], 12); }
-    else if (taps <= 20)  { msg = "meh... you can do better than that!";  color = "#ff9800"; anim = "verdict-pop";              burst(["😐","👟"], 12); }
-    else if (taps <= 30)  { msg = "that's a real CHAD run";                color = "#3aa0ff"; anim = "verdict-pop verdict-glow"; burst(["💪","🔥","👟"], 14); }
-    else if (taps <= 40)  { msg = "Usain Bolt is proud of you!!!";         color = "#a24dff"; anim = "verdict-pop verdict-glow"; burst(["🏃‍♂️","💨","⚡️"], 16); }
-    else                   { msg = "LIGHTING SPEED !!!";                    color = "#15c26b"; anim = "verdict-pop verdict-glow"; burst(["⚡️","🚀","🔥","🏁"], 20); }
-
+    if (taps <= 10) {
+      msg = "my grandma' can run faster than that!";
+      color = "#ff4d4f"; anim = "verdict-shake"; burst(["🦴","🥱","🐢"], 10);
+    } else if (taps <= 20) {
+      msg = "meh... you can do better than that!";
+      color = "#ff9800"; anim = "verdict-pop"; burst(["😐","👟"], 10);
+    } else if (taps <= 30) {
+      msg = "that's a real CHAD run";
+      color = "#3aa0ff"; anim = "verdict-pop verdict-glow"; burst(["💪","🔥","👟"], 12);
+    } else if (taps <= 40) {
+      msg = "Usein Bolt is proud of you!!!";
+      color = "#a24dff"; anim = "verdict-pop verdict-glow"; burst(["🏃‍♂️","💨","⚡️"], 14);
+    } else {
+      msg = "LIGHTING SPEED !!!";
+      color = "#15c26b"; anim = "verdict-pop verdict-glow"; burst(["⚡️","🚀","🔥","🏁"], 18);
+    }
     verdictEl.textContent = msg;
     verdictEl.style.display = "block";
     verdictEl.style.color = color;
     verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
 
     if(inTelegram && tg.sendData){
-      try { tg.sendData(JSON.stringify(payload)); ok.style.display = "block"; tapBtn.textContent = "Submitted ✅"; }
-      catch(e){ tapBtn.textContent = "Error submitting"; }
+      try {
+        tg.sendData(JSON.stringify(payload));
+        ok.style.display = "block";
+        tapBtn.textContent = "Submitted ✅";
+      } catch(e){
+        tapBtn.textContent = "Error submitting";
+      }
     } else {
       ok.style.display = "block";
       ok.textContent = "Demo result: " + JSON.stringify(payload);
       tapBtn.textContent = "Finished (demo)";
     }
-
-    function burst(symbols, count){
-      const layer = fx;
-      const rect = layer.getBoundingClientRect();
-      for(let i=0;i<count;i++){
-        const el = document.createElement("div");
-        el.className = "fx-emoji";
-        el.textContent = symbols[Math.floor(Math.random()*symbols.length)];
-        const x = (rect.width / 2) + (Math.random()*80 - 40);
-        const y = (rect.height / 2) + (Math.random()*30 - 15);
-        const dx = (Math.random()*260 - 130) + "px";
-        el.style.setProperty("--x", x+"px");
-        el.style.setProperty("--y", y+"px");
-        el.style.setProperty("--dx", dx);
-        layer.appendChild(el);
-        setTimeout(()=>{ el.remove(); }, 1000);
-      }
-    }
   }
 
-  // ---- Tap handler with dedupe ----
-  let lastTapTime = 0;
-  let lastPointerType = "";
-  let lastPointerId = null;
-
-  function handleTap(e){
-    // Only count primary pointer; ignore secondary/multi-touch or compatibility events
-    if (e && e.isPrimary === false) return;
-
-    // Debounce very fast repeats (prevents pointerdown + stray click edge-cases)
-    const now = performance.now();
-    if (now - lastTapTime < 80) return; // 80ms guard
-    lastTapTime = now;
-
-    // Ignore a mouse event that immediately follows a touch
-    if (lastPointerType === "touch" && e && e.pointerType === "mouse" && (now - lastTapTime) < 500) {
-      return;
-    }
-    lastPointerType = (e && e.pointerType) || lastPointerType;
-    lastPointerId = (e && e.pointerId) ?? lastPointerId;
-
-    e?.preventDefault?.(); e?.stopPropagation?.();
+  tapBtn.addEventListener("pointerdown", (e) => {
     if(done) return;
+    if(e.pointerType === "mouse" && e.button !== 0) return; // only left click
+    const now = performance.now();
+    if(now - lastTapTime < 80) return; // debounce
+    lastTapTime = now;
 
     if(!start){
       start = now;
       end = start + 5000;
-      tapBtn.textContent = "LET'S GO CHAMP!!!";
+      tapBtn.textContent = "TAP! TAP! TAP!";
       tick();
     }
     taps++;
@@ -278,15 +265,10 @@
     lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
     cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
     updateRunner();
-  }
-
-  // ✅ Only one listener to avoid double-counts
-  tapBtn.addEventListener("pointerdown", handleTap, {passive:false});
+  });
 
   window.addEventListener("beforeunload", () => { if(!done && start){ finish(); } });
 })();
 </script>
-
-
 </body>
 </html>
