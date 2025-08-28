@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -54,8 +15,6 @@
   }
   .wrap{position:relative; width:min(560px,96vw); background:linear-gradient(180deg,#1a1a21, #141419);
         border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
-
-  /* Header with logo */
   .title{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
   .title a{display:inline-block;}
   .title img.logo{max-height:60px;margin-bottom:6px;}
@@ -68,12 +27,8 @@
   .run1{ transform: translate(-50%, -50%) translateY(-5px) rotate(-8deg) }
   .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
 
-  /* Default: no flip (desktop) */
-.runner-emoji { display:inline-block; transform:none; }
-
-/* Default: no flip On mobile (touch devices) */
-@media (pointer: coarse) {
-  .runner-emoji { transform:scaleX(-1); }
+  .runner-emoji { display:inline-block; transform:none; }
+  @media (pointer: coarse) { .runner-emoji { transform:scaleX(-1); } }
 
   .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
   .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
@@ -94,39 +49,10 @@
   .footer{margin-top:12px; text-align:center; font-size:12px; color:var(--muted)}
   .demo{position:absolute; top:12px; right:12px; font-size:12px; color:#111; background:#ffdc7a; border-radius:999px; padding:6px 10px; display:none}
   .ok{display:none; margin-top:10px; text-align:center; color:#78ffb3}
-
-  /* Verdict effects */
-  #verdict { display:none; font-weight:800; text-align:center; margin-top:8px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
-  .verdict-pop { animation: verdictPop .45s cubic-bezier(.2,1,.3,1); }
-  .verdict-shake { animation: verdictShake .45s ease-in-out; }
-  .verdict-glow { animation: verdictGlow 1.2s ease-in-out 2; }
-  @keyframes verdictPop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1)} }
-  @keyframes verdictShake {
-    0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px) rotate(-1.5deg)}
-    40%{transform:translateX(5px) rotate(1.2deg)} 60%{transform:translateX(-4px) rotate(-.8deg)}
-    80%{transform:translateX(3px) rotate(.6deg)}
-  }
-  @keyframes verdictGlow {
-    0%{text-shadow:0 0 0 rgba(255,255,255,0)} 50%{text-shadow:0 0 18px rgba(255,255,255,.65)} 100%{text-shadow:0 0 0 rgba(255,255,255,0)}
-  }
-
-  /* Emoji burst */
-  .fx-layer { pointer-events:none; position:absolute; inset:0; overflow:hidden; }
-  .fx-emoji {
-    position:absolute; font-size:38px;
-    opacity:0; transform: translate(-50%,-50%) scale(.6);
-    animation: fxRise 900ms ease-out forwards;
-  }
-  @keyframes fxRise {
-    0%   { opacity:0; transform:translate(var(--x), var(--y)) scale(.6) rotate(0deg); }
-    20%  { opacity:1; }
-    100% { opacity:0; transform:translate(calc(var(--x) + var(--dx)), calc(var(--y) - 140px)) scale(1.25) rotate(25deg); }
-  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <!-- Header with clickable logo -->
   <div class="title">
     <a href="https://footcoin.me" target="_blank" rel="noopener">
       <img
@@ -139,22 +65,6 @@
     <span class="badge">Tap Sprint · 5s</span>
   </div>
 
-  <!-- ✅ Premium Ad Banner (clickable) -->
-  <div style="text-align:center; margin: 10px 0 12px;">
-    <a href="https://footcoin.me" target="_blank" rel="noopener">
-      <img
-        src="https://raw.githubusercontent.com/pumpinglegs/pumpinglegs-web./refs/heads/main/logo.png"
-        alt="Premium Ad - Footcoin"
-        style="max-width:80%; height:auto; border-radius:12px; cursor:pointer;"
-      />
-    </a>
-  </div>
-  <!-- ✅ End Premium Ad Banner -->
-
-  <!-- FX layer for bursts -->
-  <div class="fx-layer" id="fx"></div>
-
-  <!-- Track -->
   <div class="track">
     <div class="runner" id="runner" aria-hidden="true">
       <span class="runner-emoji">🦵</span>
@@ -163,9 +73,7 @@
 
   <div id="taps" class="meter">0</div>
   <div class="sub" id="timer">Time: 5.00s</div>
-
   <div class="bar"><div class="fill" id="fill"></div></div>
-
   <button id="tap" class="btn">TAP TO START</button>
 
   <div class="row">
@@ -175,19 +83,17 @@
 
   <div class="ok" id="ok">Submitted ✅</div>
   <div class="footer" id="hint">🔥 LET’S RUN 🏃‍♂️</div>
-  <div class="footer" id="verdict" style="display:none;font-weight:700;"></div>
-  <div class="demo" id="demo">Demo mode</div>
 </div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 (function(){
   const tg = window.Telegram && window.Telegram.WebApp;
-  const inTelegram = !!tg;
   try { tg && tg.ready && tg.ready(); } catch(e){}
+
   const params = new URLSearchParams(location.search);
-  const coin_id = params.get("coin_id") || "DEMO";
-  const gid = params.get("gid"); // NEW
+  const coin_id = (params.get("coin_id") || "DEMO").toUpperCase();
+  const gid = params.get("gid"); // group id (string)
 
   const tapBtn = document.getElementById("tap");
   const tapsEl = document.getElementById("taps");
@@ -195,19 +101,11 @@
   const cpsEl = document.getElementById("cps");
   const timerEl = document.getElementById("timer");
   const fill = document.getElementById("fill");
-  const ok = document.getElementById("ok");
-  const demo = document.getElementById("demo");
   const runner = document.getElementById("runner");
-  const verdictEl = document.getElementById("verdict");
 
-  if(!inTelegram){ demo.style.display = "inline-block"; }
-
-  let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTimes=[], phase=0, lastTapTime=0;
-
-  function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
-
+  let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTime=0, phase=0;
   function updateRunner(){
-    const target = 50; // ~50 taps to reach the end
+    const target = 50;
     const pct = Math.min(100, (taps/target) * 100);
     runner.style.left = pct + "%";
     phase ^= 1;
@@ -217,29 +115,10 @@
   function tick(){
     const now = performance.now();
     const left = Math.max(0, end - now);
-    const s = left / 1000;
-    timerEl.textContent = "Time: " + s.toFixed(2) + "s";
-    fill.style.width = (100 * (1 - s/5)).toFixed(1) + "%";
+    timerEl.textContent = "Time: " + (left/1000).toFixed(2) + "s";
+    fill.style.width = (100 * (1 - (left/5000))).toFixed(1) + "%";
     if(left <= 0) return finish();
     raf = requestAnimationFrame(tick);
-  }
-
-  function burst(symbols, count){
-    const layer = document.getElementById("fx");
-    const rect = layer.getBoundingClientRect();
-    for(let i=0;i<count;i++){
-      const el = document.createElement("div");
-      el.className = "fx-emoji";
-      el.textContent = symbols[Math.floor(Math.random()*symbols.length)];
-      const x = (rect.width / 2) + (Math.random()*80 - 40);
-      const y = (rect.height / 2) + (Math.random()*30 - 15);
-      const dx = (Math.random()*260 - 130) + "px";
-      el.style.setProperty("--x", x+"px");
-      el.style.setProperty("--y", y+"px");
-      el.style.setProperty("--dx", dx);
-      layer.appendChild(el);
-      setTimeout(()=>{ el.remove(); }, 1000);
-    }
   }
 
   function finish(){
@@ -249,58 +128,27 @@
     tapBtn.disabled = true;
     tapBtn.textContent = "Submitting…";
 
-    const now = performance.now();
-    const windowMs = 1000;
-    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
-    const cps = lastTapTimes.length / (windowMs/1000);
-    cpsEl.textContent = cps.toFixed(1);
-
-    const safe = clamp(taps, 0, 500);
-    const payload = { coin_id, gid, taps: safe };  // include gid if present
-
-    let msg = "", color = "#fff", anim = "verdict-pop";
-    if (taps <= 10) {
-      msg = "my grandma' can run faster than that!";
-      color = "#ff4d4f"; anim = "verdict-shake"; burst(["🦴","🥱","🐢"], 10);
-    } else if (taps <= 20) {
-      msg = "meh... you can do better than that!";
-      color = "#ff9800"; anim = "verdict-pop"; burst(["😐","👟"], 10);
-    } else if (taps <= 30) {
-      msg = "that's a real CHAD run";
-      color = "#3aa0ff"; anim = "verdict-pop verdict-glow"; burst(["💪","🔥","👟"], 12);
-    } else if (taps <= 40) {
-      msg = "Usain Bolt is proud of you!!!";
-      color = "#a24dff"; anim = "verdict-pop verdict-glow"; burst(["🏃‍♂️","💨","⚡️"], 14);
-    } else {
-      msg = "LIGHTING SPEED !!!";
-      color = "#15c26b"; anim = "verdict-pop verdict-glow"; burst(["⚡️","🚀","🔥","🏁"], 18);
-    }
-    verdictEl.textContent = msg;
-    verdictEl.style.display = "block";
-    verdictEl.style.color = color;
-    verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
-
-    if(inTelegram && tg.sendData){
+    const payload = { coin_id, gid, taps: Math.max(0, Math.min(500, taps)) };
+    if (tg && tg.sendData) {
       try {
         tg.sendData(JSON.stringify(payload));
-        ok.style.display = "block";
+        document.getElementById("ok").style.display = "block";
         tapBtn.textContent = "Submitted ✅";
-      } catch(e){
-        console.error("Failed to send data to Telegram:", e);
-        tapBtn.textContent = "Error submitting: " + e.message;
+      } catch(e) {
+        tapBtn.textContent = "Error submitting";
       }
     } else {
-      ok.style.display = "block";
-      ok.textContent = "Demo result: " + JSON.stringify(payload);
+      document.getElementById("ok").style.display = "block";
+      document.getElementById("ok").textContent = "Demo result: " + JSON.stringify(payload);
       tapBtn.textContent = "Finished (demo)";
     }
   }
 
   tapBtn.addEventListener("pointerdown", (e) => {
     if(done) return;
-    if(e.pointerType === "mouse" && e.button !== 0) return; // only left click
+    if(e.pointerType === "mouse" && e.button !== 0) return;
     const now = performance.now();
-    if(now - lastTapTime < 80) return; // debounce
+    if(now - lastTapTime < 80) return;
     lastTapTime = now;
 
     if(!start){
@@ -313,10 +161,8 @@
     tapsEl.textContent = taps;
     best = Math.max(best, taps);
     bestEl.textContent = best;
-    lastTapTimes.push(now);
-    const windowMs = 1000;
-    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
-    cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
+    const cps = taps / Math.max(1, ((performance.now() - start) / 1000));
+    cpsEl.textContent = cps.toFixed(1);
     updateRunner();
   });
 
