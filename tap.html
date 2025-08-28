@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -81,6 +42,7 @@
     -webkit-tap-highlight-color: transparent; touch-action:manipulation;
   }
   .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:0.7; cursor:not-allowed;}
 
   .row{display:flex; gap:10px; margin-top:12px}
   .pill{flex:1; text-align:center; background:#191926; border:1px solid #252536; padding:10px 12px; border-radius:12px; color:var(--muted)}
@@ -88,6 +50,7 @@
   .footer{margin-top:12px; text-align:center; font-size:12px; color:var(--muted)}
   .demo{position:absolute; top:12px; right:12px; font-size:12px; color:#111; background:#ffdc7a; border-radius:999px; padding:6px 10px; display:none}
   .ok{display:none; margin-top:10px; text-align:center; color:#78ffb3}
+  .debug{margin-top:10px; font-size:11px; color:var(--muted); text-align:center; display:none;}
 </style>
 </head>
 <body>
@@ -121,18 +84,47 @@
   </div>
 
   <div class="ok" id="ok">Submitted ✅</div>
-  <div class="footer" id="hint">🔥 LET’S RUN 🏃‍♂️</div>
+  <div class="footer" id="hint">🔥 LET'S RUN 🏃‍♂️</div>
+  <div class="debug" id="debug">Debug info will appear here</div>
 </div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 (function(){
-  const tg = window.Telegram && window.Telegram.WebApp;
-  try { tg && tg.ready && tg.ready(); } catch(e){}
+  const debugEl = document.getElementById("debug");
+  
+  function debugLog(msg) {
+    console.log(msg);
+    debugEl.style.display = "block";
+    debugEl.innerHTML += msg + "<br>";
+  }
+  
+  // Initialize Telegram WebApp
+  const tg = window.Telegram?.WebApp;
+  debugLog("Telegram WebApp available: " + !!tg);
+  
+  if (tg) {
+    try {
+      tg.ready();
+      debugLog("WebApp ready called");
+      
+      // Expand the web app to full height
+      tg.expand();
+      debugLog("WebApp expanded");
+      
+      // Show main button
+      tg.MainButton.hide();
+      
+    } catch(e) {
+      debugLog("Error initializing WebApp: " + e.message);
+    }
+  }
 
   const params = new URLSearchParams(location.search);
   const coin_id = (params.get("coin_id") || "DEMO").toUpperCase();
   const gid = params.get("gid"); // group id (string)
+  
+  debugLog("Game params - coin_id: " + coin_id + ", gid: " + gid);
 
   const tapBtn = document.getElementById("tap");
   const tapsEl = document.getElementById("taps");
@@ -141,8 +133,10 @@
   const timerEl = document.getElementById("timer");
   const fill = document.getElementById("fill");
   const runner = document.getElementById("runner");
+  const okEl = document.getElementById("ok");
 
   let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTime=0, phase=0;
+  
   function updateRunner(){
     const target = 50;
     const pct = Math.min(100, (taps/target) * 100);
@@ -167,32 +161,48 @@
     tapBtn.disabled = true;
     tapBtn.textContent = "Submitting…";
 
-    const payload = { coin_id, gid, taps: Math.max(0, Math.min(500, taps)) };
-    if (tg && tg.sendData) {
+    const finalTaps = Math.max(0, Math.min(500, taps));
+    const payload = { 
+      coin_id: coin_id, 
+      gid: gid, 
+      taps: finalTaps 
+    };
+    
+    debugLog("Submitting payload: " + JSON.stringify(payload));
+    
+    if (tg && typeof tg.sendData === 'function') {
       try {
-        console.log("Sending payload to Telegram:", payload);
-        tg.sendData(JSON.stringify(payload));
-        document.getElementById("ok").style.display = "block";
+        const dataString = JSON.stringify(payload);
+        debugLog("Sending data to Telegram: " + dataString);
+        tg.sendData(dataString);
+        
+        okEl.style.display = "block";
+        okEl.textContent = "Submitted ✅";
         tapBtn.textContent = "Submitted ✅";
+        debugLog("Data sent successfully");
+        
       } catch(e) {
-        console.error("Failed to send data to Telegram:", e, e.stack);
-        tapBtn.textContent = "Error submitting: " + e.message;
-        document.getElementById("ok").style.display = "block";
-        document.getElementById("ok").textContent = "Error: " + e.message;
+        debugLog("Error sending data to Telegram: " + e.message);
+        okEl.style.display = "block";
+        okEl.textContent = "Error: " + e.message;
+        tapBtn.textContent = "Error submitting";
       }
     } else {
-      console.log("Demo mode - Payload:", payload);
-      document.getElementById("ok").style.display = "block";
-      document.getElementById("ok").textContent = "Demo result: " + JSON.stringify(payload);
+      debugLog("Demo mode - would submit: " + JSON.stringify(payload));
+      okEl.style.display = "block";
+      okEl.textContent = "Demo mode - score: " + finalTaps;
       tapBtn.textContent = "Finished (demo)";
     }
   }
 
-  tapBtn.addEventListener("pointerdown", (e) => {
+  // Handle tap button with better event handling
+  function handleTap(e) {
     if(done) return;
-    if(e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
     const now = performance.now();
-    if(now - lastTapTime < 80) return;
+    if(now - lastTapTime < 50) return; // Reduced debounce
     lastTapTime = now;
 
     if(!start){
@@ -208,9 +218,34 @@
     const cps = taps / Math.max(1, ((performance.now() - start) / 1000));
     cpsEl.textContent = cps.toFixed(1);
     updateRunner();
+  }
+
+  // Add multiple event listeners for better compatibility
+  tapBtn.addEventListener("pointerdown", handleTap);
+  tapBtn.addEventListener("touchstart", handleTap);
+  tapBtn.addEventListener("mousedown", handleTap);
+  tapBtn.addEventListener("click", handleTap);
+
+  // Prevent default touch behaviors
+  tapBtn.addEventListener("touchstart", function(e) {
+    e.preventDefault();
+  }, { passive: false });
+
+  // Handle page unload
+  window.addEventListener("beforeunload", () => { 
+    if(!done && start){ 
+      finish(); 
+    } 
   });
 
-  window.addEventListener("beforeunload", () => { if(!done && start){ finish(); } });
+  // Add visibility change handler
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && !done && start) {
+      finish();
+    }
+  });
+  
+  debugLog("Game initialized successfully");
 })();
 </script>
 </body>
