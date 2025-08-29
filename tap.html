@@ -30,59 +30,58 @@
   .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
 
   /* Default: no flip (desktop) */
-  .runner-emoji { display:inline-block; transform:none; }
+.runner-emoji { display:inline-block; transform:none; }
 
-  /* Default: no flip On mobile (touch devices) */
-  @media (pointer: coarse) {
-    .runner-emoji { transform:scaleX(-1); }
+/* Default: no flip On mobile (touch devices) */
+@media (pointer: coarse) {
+  .runner-emoji { transform:scaleX(-1); }
 
-    .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
-    .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
-    .bar{height:14px; width:100%; background:#1e1e28; border:1px solid #2a2a36; border-radius:999px; overflow:hidden}
-    .fill{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .08s linear}
+  .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
+  .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
+  .bar{height:14px; width:100%; background:#1e1e28; border:1px solid #2a2a36; border-radius:999px; overflow:hidden}
+  .fill{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .08s linear}
 
-    .btn{
-      display:block; width:100%; margin-top:16px; padding:18px 20px; font-size:22px; font-weight:800; letter-spacing:.3px;
-      color:#121214; background:linear-gradient(180deg,var(--accent),var(--accent-2));
-      border:none; border-radius:16px; cursor:pointer; box-shadow:0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
-      -webkit-tap-highlight-color: transparent; touch-action:manipulation;
-    }
-    .btn:active{transform:translateY(1px)}
+  .btn{
+    display:block; width:100%; margin-top:16px; padding:18px 20px; font-size:22px; font-weight:800; letter-spacing:.3px;
+    color:#121214; background:linear-gradient(180deg,var(--accent),var(--accent-2));
+    border:none; border-radius:16px; cursor:pointer; box-shadow:0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
+    -webkit-tap-highlight-color: transparent; touch-action:manipulation;
+  }
+  .btn:active{transform:translateY(1px)}
 
-    .row{display:flex; gap:10px; margin-top:12px}
-    .pill{flex:1; text-align:center; background:#191926; border:1px solid #252536; padding:10px 12px; border-radius:12px; color:var(--muted)}
-    .big{font-size:22px; font-weight:800; color:var(--text)}
-    .footer{margin-top:12px; text-align:center; font-size:12px; color:var(--muted)}
-    .demo{position:absolute; top:12px; right:12px; font-size:12px; color:#111; background:#ffdc7a; border-radius:999px; padding:6px 10px; display:none}
-    .ok{display:none; margin-top:10px; text-align:center; color:#78ffb3}
+  .row{display:flex; gap:10px; margin-top:12px}
+  .pill{flex:1; text-align:center; background:#191926; border:1px solid #252536; padding:10px 12px; border-radius:12px; color:var(--muted)}
+  .big{font-size:22px; font-weight:800; color:var(--text)}
+  .footer{margin-top:12px; text-align:center; font-size:12px; color:var(--muted)}
+  .demo{position:absolute; top:12px; right:12px; font-size:12px; color:#111; background:#ffdc7a; border-radius:999px; padding:6px 10px; display:none}
+  .ok{display:none; margin-top:10px; text-align:center; color:#78ffb3}
 
-    /* Verdict effects */
-    #verdict { display:none; font-weight:800; text-align:center; margin-top:8px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
-    .verdict-pop { animation: verdictPop .45s cubic-bezier(.2,1,.3,1); }
-    .verdict-shake { animation: verdictShake .45s ease-in-out; }
-    .verdict-glow { animation: verdictGlow 1.2s ease-in-out 2; }
-    @keyframes verdictPop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1)} }
-    @keyframes verdictShake {
-      0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px) rotate(-1.5deg)}
-      40%{transform:translateX(5px) rotate(1.2deg)} 60%{transform:translateX(-4px) rotate(-.8deg)}
-      80%{transform:translateX(3px) rotate(.6deg)}
-    }
-    @keyframes verdictGlow {
-      0%{text-shadow:0 0 0 rgba(255,255,255,0)} 50%{text-shadow:0 0 18px rgba(255,255,255,.65)} 100%{text-shadow:0 0 0 rgba(255,255,255,0)}
-    }
+  /* Verdict effects */
+  #verdict { display:none; font-weight:800; text-align:center; margin-top:8px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
+  .verdict-pop { animation: verdictPop .45s cubic-bezier(.2,1,.3,1); }
+  .verdict-shake { animation: verdictShake .45s ease-in-out; }
+  .verdict-glow { animation: verdictGlow 1.2s ease-in-out 2; }
+  @keyframes verdictPop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1)} }
+  @keyframes verdictShake {
+    0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px) rotate(-1.5deg)}
+    40%{transform:translateX(5px) rotate(1.2deg)} 60%{transform:translateX(-4px) rotate(-.8deg)}
+    80%{transform:translateX(3px) rotate(.6deg)}
+  }
+  @keyframes verdictGlow {
+    0%{text-shadow:0 0 0 rgba(255,255,255,0)} 50%{text-shadow:0 0 18px rgba(255,255,255,.65)} 100%{text-shadow:0 0 0 rgba(255,255,255,0)}
+  }
 
-    /* Emoji burst */
-    .fx-layer { pointer-events:none; position:absolute; inset:0; overflow:hidden; }
-    .fx-emoji {
-      position:absolute; font-size:38px;
-      opacity:0; transform: translate(-50%,-50%) scale(.6);
-      animation: fxRise 900ms ease-out forwards;
-    }
-    @keyframes fxRise {
-      0%   { opacity:0; transform:translate(var(--x), var(--y)) scale(.6) rotate(0deg); }
-      20%  { opacity:1; }
-      100% { opacity:0; transform:translate(calc(var(--x) + var(--dx)), calc(var(--y) - 140px)) scale(1.25) rotate(25deg); }
-    }
+  /* Emoji burst */
+  .fx-layer { pointer-events:none; position:absolute; inset:0; overflow:hidden; }
+  .fx-emoji {
+    position:absolute; font-size:38px;
+    opacity:0; transform: translate(-50%,-50%) scale(.6);
+    animation: fxRise 900ms ease-out forwards;
+  }
+  @keyframes fxRise {
+    0%   { opacity:0; transform:translate(var(--x), var(--y)) scale(.6) rotate(0deg); }
+    20%  { opacity:1; }
+    100% { opacity:0; transform:translate(calc(var(--x) + var(--dx)), calc(var(--y) - 140px)) scale(1.25) rotate(25deg); }
   }
 </style>
 </head>
