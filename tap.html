@@ -16,10 +16,32 @@
   .wrap{position:relative; width:min(560px,96vw); background:linear-gradient(180deg,#1a1a21, #141419);
         border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
 
+  /* FootCoin Premium Ad Banner */
+  .footcoin-ad {
+    background: linear-gradient(90deg, #8b5cf6, #a855f7);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: white;
+    font-weight: 700;
+  }
+  .footcoin-logo {
+    width: 24px;
+    height: 24px;
+    background: #fbbf24;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
   /* Header with logo */
   .title{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
-  .title a{display:inline-block;}
-  .title img.logo{max-height:60px;margin-bottom:6px;}
   .title-text{font-weight:800; letter-spacing:.2px; font-size:22px;}
   .title .badge{font-size:12px; padding:4px 8px; border-radius:999px; background:#222231; color:var(--muted); border:1px solid #2c2c39}
 
@@ -35,6 +57,7 @@
 /* Default: no flip On mobile (touch devices) */
 @media (pointer: coarse) {
   .runner-emoji { transform:scaleX(-1); }
+}
 
   .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
   .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
@@ -87,30 +110,19 @@
 </head>
 <body>
 <div class="wrap">
-  <!-- Header with clickable logo -->
+  <!-- FootCoin Premium Ad Banner -->
+  <a href="https://footcoin.me" target="_blank" rel="noopener" class="footcoin-ad">
+    <div class="footcoin-logo">🦶</div>
+    <div>
+      <div style="font-size: 14px;">footcoin</div>
+      <div style="font-size: 11px; opacity: 0.8;">Premium Ad*</div>
+    </div>
+  </a>
+
   <div class="title">
-    <a href="https://footcoin.me" target="_blank" rel="noopener">
-      <img
-        src="https://raw.githubusercontent.com/pumpinglegs/pumpinglegs-web./refs/heads/main/logo.png"
-        alt="PumpingLegs Logo"
-        class="logo"
-      />
-    </a>
-    <div class="title-text">PumpingLegs</div>
+    <div class="title-text">🏃‍♂️ PumpingLegs</div>
     <span class="badge">Tap Sprint · 5s</span>
   </div>
-
-  <!-- ✅ Premium Ad Banner (clickable) -->
-  <div style="text-align:center; margin: 10px 0 12px;">
-    <a href="https://footcoin.me" target="_blank" rel="noopener">
-      <img
-        src="https://raw.githubusercontent.com/pumpinglegs/pumpinglegs-web./refs/heads/main/logo.png"
-        alt="Premium Ad - Footcoin"
-        style="max-width:80%; height:auto; border-radius:12px; cursor:pointer;"
-      />
-    </a>
-  </div>
-  <!-- ✅ End Premium Ad Banner -->
 
   <!-- FX layer for bursts -->
   <div class="fx-layer" id="fx"></div>
@@ -135,7 +147,7 @@
   </div>
 
   <div class="ok" id="ok">Submitted ✅</div>
-  <div class="footer" id="hint">🔥 LET’S RUN 🏃‍♂️</div>
+  <div class="footer" id="hint">Keep tapping — fastest legs win!!</div>
   <div class="footer" id="verdict" style="display:none;font-weight:700;"></div>
   <div class="demo" id="demo">Demo mode</div>
 </div>
@@ -145,9 +157,18 @@
 (function(){
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!tg;
-  try { tg && tg.ready && tg.ready(); } catch(e){}
+  
+  // WEBAPP FIX: Initialize WebApp properly
+  if (tg) {
+    try { 
+      tg.ready(); 
+      tg.expand(); 
+    } catch(e) {}
+  }
+  
   const params = new URLSearchParams(location.search);
   const coin_id = params.get("coin_id") || "DEMO";
+  const gid = params.get("gid");
 
   const tapBtn = document.getElementById("tap");
   const tapsEl = document.getElementById("taps");
@@ -167,7 +188,7 @@
   function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
   function updateRunner(){
-    const target = 50; // ~50 taps to reach the end
+    const target = 50;
     const pct = Math.min(100, (taps/target) * 100);
     runner.style.left = pct + "%";
     phase ^= 1;
@@ -216,7 +237,7 @@
     cpsEl.textContent = cps.toFixed(1);
 
     const safe = clamp(taps, 0, 500);
-    const payload = { coin_id, taps: safe };
+    const payload = { coin_id, gid, taps: safe };
 
     let msg = "", color = "#fff", anim = "verdict-pop";
     if (taps <= 10) {
@@ -240,8 +261,10 @@
     verdictEl.style.color = color;
     verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
 
+    // WEBAPP FIX: Enhanced data sending with debug
     if(inTelegram && tg.sendData){
       try {
+        console.log("Sending data:", JSON.stringify(payload));
         tg.sendData(JSON.stringify(payload));
         ok.style.display = "block";
         tapBtn.textContent = "Submitted ✅";
@@ -257,9 +280,9 @@
 
   tapBtn.addEventListener("pointerdown", (e) => {
     if(done) return;
-    if(e.pointerType === "mouse" && e.button !== 0) return; // only left click
+    if(e.pointerType === "mouse" && e.button !== 0) return;
     const now = performance.now();
-    if(now - lastTapTime < 80) return; // debounce
+    if(now - lastTapTime < 80) return;
     lastTapTime = now;
 
     if(!start){
@@ -278,6 +301,31 @@
     cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
     updateRunner();
   });
+
+  // WEBAPP FIX: Add touchstart for mobile
+  tapBtn.addEventListener("touchstart", (e) => {
+    if(done) return;
+    e.preventDefault();
+    const now = performance.now();
+    if(now - lastTapTime < 80) return;
+    lastTapTime = now;
+
+    if(!start){
+      start = now;
+      end = start + 5000;
+      tapBtn.textContent = "LET'S GO CHAMP";
+      tick();
+    }
+    taps++;
+    tapsEl.textContent = taps;
+    best = Math.max(best, taps);
+    bestEl.textContent = best;
+    lastTapTimes.push(now);
+    const windowMs = 1000;
+    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
+    cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
+    updateRunner();
+  }, { passive: false });
 
   window.addEventListener("beforeunload", () => { if(!done && start){ finish(); } });
 })();
