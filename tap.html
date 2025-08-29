@@ -52,12 +52,12 @@
   .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
 
   /* Default: no flip (desktop) */
-.runner-emoji { display:inline-block; transform:none; }
+  .runner-emoji { display:inline-block; transform:none; }
 
-/* Default: no flip On mobile (touch devices) */
-@media (pointer: coarse) {
-  .runner-emoji { transform:scaleX(-1); }
-}
+  /* Flip emoji only on touch devices */
+  @media (pointer: coarse) {
+    .runner-emoji { transform:scaleX(-1); }
+  }
 
   .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
   .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
@@ -157,18 +157,15 @@
 (function(){
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!tg;
-  
-  // WEBAPP FIX: Initialize WebApp properly
+
+  // Proper WebApp init
   if (tg) {
-    try { 
-      tg.ready(); 
-      tg.expand(); 
-    } catch(e) {}
+    try { tg.ready(); tg.expand(); } catch(e) {}
   }
-  
+
   const params = new URLSearchParams(location.search);
   const coin_id = params.get("coin_id") || "DEMO";
-  const gid = params.get("gid");
+  const gid = params.get("gid"); // <- IMPORTANT: passed back to bot
 
   const tapBtn = document.getElementById("tap");
   const tapsEl = document.getElementById("taps");
@@ -188,7 +185,7 @@
   function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
   function updateRunner(){
-    const target = 50;
+    const target = 50; // ~50 taps to reach the end
     const pct = Math.min(100, (taps/target) * 100);
     runner.style.left = pct + "%";
     phase ^= 1;
@@ -261,10 +258,8 @@
     verdictEl.style.color = color;
     verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
 
-    // WEBAPP FIX: Enhanced data sending with debug
     if(inTelegram && tg.sendData){
       try {
-        console.log("Sending data:", JSON.stringify(payload));
         tg.sendData(JSON.stringify(payload));
         ok.style.display = "block";
         tapBtn.textContent = "Submitted ✅";
@@ -278,11 +273,12 @@
     }
   }
 
+  // Primary input: Pointer (works for mouse + touch with Pointer Events)
   tapBtn.addEventListener("pointerdown", (e) => {
     if(done) return;
-    if(e.pointerType === "mouse" && e.button !== 0) return;
+    if(e.pointerType === "mouse" && e.button !== 0) return; // only left click
     const now = performance.now();
-    if(now - lastTapTime < 80) return;
+    if(now - lastTapTime < 80) return; // debounce
     lastTapTime = now;
 
     if(!start){
@@ -302,7 +298,7 @@
     updateRunner();
   });
 
-  // WEBAPP FIX: Add touchstart for mobile
+  // Safety for older mobile browsers that don’t fully support Pointer Events
   tapBtn.addEventListener("touchstart", (e) => {
     if(done) return;
     e.preventDefault();
