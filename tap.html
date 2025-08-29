@@ -16,31 +16,56 @@
   .wrap{position:relative; width:min(560px,96vw); background:linear-gradient(180deg,#1a1a21, #141419);
         border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
 
-  /* FootCoin Premium Ad Banner */
+  /* === FootCoin Premium Ad (glowing, purple) === */
   .footcoin-ad {
-    background: linear-gradient(90deg, #8b5cf6, #a855f7);
-    border-radius: 12px;
-    padding: 12px 16px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
     margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    border-radius: 14px;
     text-decoration: none;
-    color: white;
-    font-weight: 700;
+    color: #fff;
+    background: rgba(30, 17, 54, 0.55); /* translucent purple glass */
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    overflow: hidden;
+    isolation: isolate; /* keep glow behind content */
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
-  .footcoin-logo {
-    width: 24px;
-    height: 24px;
-    background: #fbbf24;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
+  .footcoin-ad::before {
+    content: "";
+    position: absolute;
+    inset: -30%;
+    background: radial-gradient(400px 200px at 10% 50%, rgba(168,85,247,.38), rgba(99,102,241,.28) 40%, rgba(0,0,0,0) 60%),
+                radial-gradient(400px 200px at 90% 50%, rgba(236,72,153,.32), rgba(168,85,247,.18) 40%, rgba(0,0,0,0) 60%);
+    filter: blur(18px);
+    z-index: -1;
+    animation: glowDrift 9s ease-in-out infinite alternate;
+  }
+  @keyframes glowDrift {
+    0% { transform: translateX(-2%) translateY(0%); opacity: .9; }
+    100% { transform: translateX(2%) translateY(2%); opacity: 1; }
+  }
+  .footcoin-img {
+    flex: 0 0 auto;
+    width: 140px; /* responsive-ish, keeps logo “left” presence */
+    max-width: 40%;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(168,85,247,.35);
+  }
+  .footcoin-copy {
+    display:flex; flex-direction:column; gap:2px; min-width:0;
+  }
+  .footcoin-title {
+    font-weight: 800; letter-spacing:.2px; font-size: 16px; line-height: 1.15;
+  }
+  .footcoin-tag {
+    font-size: 11px; opacity: .85; color: #E7D7FF;
   }
 
-  /* Header with logo */
+  /* Header with logo/text */
   .title{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
   .title-text{font-weight:800; letter-spacing:.2px; font-size:22px;}
   .title .badge{font-size:12px; padding:4px 8px; border-radius:999px; background:#222231; color:var(--muted); border:1px solid #2c2c39}
@@ -110,12 +135,17 @@
 </head>
 <body>
 <div class="wrap">
-  <!-- FootCoin Premium Ad Banner -->
-  <a href="https://footcoin.me" target="_blank" rel="noopener" class="footcoin-ad">
-    <div class="footcoin-logo">🦶</div>
-    <div>
-      <div style="font-size: 14px;">footcoin</div>
-      <div style="font-size: 11px; opacity: 0.8;">Premium Ad*</div>
+  <!-- Glowing FootCoin Premium Ad -->
+  <a href="https://footcoin.me" target="_blank" rel="noopener" class="footcoin-ad" aria-label="Footcoin Premium Ad">
+    <img
+      class="footcoin-img"
+      src="https://footcoin.me/wp-content/uploads/2025/05/1746852152907-1024x341.png"
+      alt="Footcoin"
+      loading="lazy"
+    />
+    <div class="footcoin-copy">
+      <div class="footcoin-title">footcoin</div>
+      <div class="footcoin-tag">Premium Ad*</div>
     </div>
   </a>
 
@@ -158,14 +188,11 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!tg;
 
-  // Proper WebApp init
-  if (tg) {
-    try { tg.ready(); tg.expand(); } catch(e) {}
-  }
+  if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
 
   const params = new URLSearchParams(location.search);
   const coin_id = params.get("coin_id") || "DEMO";
-  const gid = params.get("gid"); // <- IMPORTANT: passed back to bot
+  const gid = params.get("gid");
 
   const tapBtn = document.getElementById("tap");
   const tapsEl = document.getElementById("taps");
@@ -185,7 +212,7 @@
   function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
   function updateRunner(){
-    const target = 50; // ~50 taps to reach the end
+    const target = 50;
     const pct = Math.min(100, (taps/target) * 100);
     runner.style.left = pct + "%";
     phase ^= 1;
@@ -273,12 +300,11 @@
     }
   }
 
-  // Primary input: Pointer (works for mouse + touch with Pointer Events)
   tapBtn.addEventListener("pointerdown", (e) => {
     if(done) return;
-    if(e.pointerType === "mouse" && e.button !== 0) return; // only left click
+    if(e.pointerType === "mouse" && e.button !== 0) return;
     const now = performance.now();
-    if(now - lastTapTime < 80) return; // debounce
+    if(now - lastTapTime < 80) return;
     lastTapTime = now;
 
     if(!start){
@@ -298,7 +324,7 @@
     updateRunner();
   });
 
-  // Safety for older mobile browsers that don’t fully support Pointer Events
+  // Fallback for older mobile browsers
   tapBtn.addEventListener("touchstart", (e) => {
     if(done) return;
     e.preventDefault();
