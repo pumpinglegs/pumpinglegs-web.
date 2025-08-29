@@ -19,7 +19,7 @@
     border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)
   }
 
-  /* Premium banner: centered group with logo (left) + "Premium Ad*" (right) — pulsating gradient + glow */
+  /* Premium banner (pulsating gradient + glow) */
   .footcoin-ad{
     position:relative; display:flex; align-items:center; justify-content:center;
     gap:12px; text-decoration:none; padding:14px 18px; margin-bottom:20px; border-radius:14px; overflow:hidden;
@@ -29,23 +29,13 @@
     box-shadow: 0 0 18px rgba(236,72,153,.45), 0 0 30px rgba(139,92,246,.35), inset 0 0 15px rgba(255,255,255,.1);
     animation: bannerShift 6s ease-in-out infinite, bannerGlow 2.8s ease-in-out infinite;
   }
-  @keyframes bannerShift {
-    0% { background-position: 0% 0; }
-    50% { background-position: 100% 0; }
-    100% { background-position: 0% 0; }
-  }
+  @keyframes bannerShift { 0%{background-position:0% 0} 50%{background-position:100% 0} 100%{background-position:0% 0} }
   @keyframes bannerGlow {
     0%,100% { box-shadow: 0 0 14px rgba(236,72,153,.35), 0 0 22px rgba(139,92,246,.28), inset 0 0 10px rgba(255,255,255,.08); }
     50%     { box-shadow: 0 0 22px rgba(236,72,153,.55), 0 0 38px rgba(139,92,246,.45), inset 0 0 16px rgba(255,255,255,.12); }
   }
-  .footcoin-ad img{
-    height:42px; width:auto; border-radius:8px; display:block;
-    filter: drop-shadow(0 3px 10px rgba(255,255,255,.25));
-  }
-  .footcoin-ad .label{
-    font-weight:800; font-size:13px; letter-spacing:.35px; white-space:nowrap; opacity:.95;
-    text-shadow: 0 1px 6px rgba(0,0,0,.35);
-  }
+  .footcoin-ad img{ height:42px; width:auto; border-radius:8px; display:block; filter: drop-shadow(0 3px 10px rgba(255,255,255,.25)); }
+  .footcoin-ad .label{ font-weight:800; font-size:13px; letter-spacing:.35px; white-space:nowrap; opacity:.95; text-shadow:0 1px 6px rgba(0,0,0,.35) }
   @media (max-width:360px){
     .footcoin-ad{ gap:10px; padding:12px 14px; }
     .footcoin-ad img{ height:36px; }
@@ -73,7 +63,7 @@
   .btn{
     display:block; width:100%; margin-top:16px; padding:18px 20px; font-size:22px; font-weight:800; letter-spacing:.3px;
     color:#121214; background:linear-gradient(180deg,var(--accent),var(--accent-2));
-    border:none; border-radius:16px; cursor:pointer; box-shadow: 0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
+    border:none; border-radius:16px; cursor:pointer; box-shadow:0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
   }
   .btn:active{transform:translateY(1px)}
 
@@ -169,19 +159,18 @@
   <div class="demo" id="demo">Demo mode</div>
 </div>
 
-<!-- Debug panel (appears only with ?debug=1) -->
+<!-- Debug panel -->
 <div id="dbg" class="dbg"></div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 (function(){
-  // ---- tiny debug logger to screen + console
+  // ---- debug overlay
   const dbg = document.getElementById('dbg');
   const showDebug = new URLSearchParams(location.search).get('debug') === '1';
   if (showDebug) dbg.style.display = 'block';
-
   function log(kind, ...args){
-    try {
+    try{
       const line = document.createElement('div');
       const time = new Date().toLocaleTimeString();
       const txt = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
@@ -189,20 +178,19 @@
       line.innerHTML = `<b>[${time}]</b> ${txt}`;
       if (showDebug) { dbg.appendChild(line); dbg.scrollTop = dbg.scrollHeight; }
       (kind==='err'?console.error:kind==='warn'?console.warn:console.log)(...args);
-    } catch(e){}
+    }catch(e){}
   }
-  const dlog = (...a)=>log('log',...a), dwarn=(...a)=>log('warn',...a), derr=(...a)=>log('err',...a);
+  const dlog=(...a)=>log('log',...a), dwarn=(...a)=>log('warn',...a), derr=(...a)=>log('err',...a);
 
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!tg;
   try { tg && tg.ready && tg.ready(); tg && tg.expand && tg.expand(); } catch(e){}
+
   dlog('WebApp object:', !!tg, 'inTelegram:', inTelegram);
   try {
-    if (tg) {
-      dlog('tg.platform:', tg.platform);
-      dlog('tg.colorScheme:', tg.colorScheme);
-      dlog('tg.initDataUnsafe keys:', Object.keys(tg.initDataUnsafe || {}));
-    }
+    dlog('tg.platform:', tg && tg.platform);
+    dlog('tg.colorScheme:', tg && tg.colorScheme);
+    dlog('tg.version:', tg && tg.version);
   } catch(e){}
 
   const params = new URLSearchParams(location.search);
@@ -221,6 +209,24 @@
   const verdictEl = document.getElementById("verdict");
 
   if(!inTelegram){ demo.style.display = "inline-block"; dlog('NOT inside Telegram. Demo mode.'); }
+
+  // Telegram MainButton fallback (no visual change to page)
+  const hasMainButton = !!(tg && tg.MainButton);
+  if (hasMainButton) {
+    tg.MainButton.setParams({ text: 'Submit Score', is_visible: false, is_active: true });
+    tg.onEvent('mainButtonClicked', () => {
+      if (!window.__pendingPayload) return;
+      try {
+        const s = JSON.stringify(window.__pendingPayload);
+        dlog('MainButton clicked -> tg.sendData', s);
+        tg.sendData(s);
+        ok.style.display = "block";
+        // Do NOT auto-close; let Telegram Desktop deliver.
+      } catch(e) {
+        derr('sendData on MainButton error', e);
+      }
+    });
+  }
 
   let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTimes=[], phase=0, lastTapTime=0;
 
@@ -280,8 +286,9 @@
     const safe = clamp(taps, 0, 500);
     const payload = { coin_id, taps: safe };
     if (gid != null) payload.gid = gid;
+    window.__pendingPayload = payload; // expose for MainButton
 
-    // Verdict + effects (unchanged visuals)
+    // Verdict + effects
     let msg = "", color = "#fff", anim = "verdict-pop";
     if (taps <= 10) { msg="my grandma' can run faster than that!"; color="#ff4d4f"; anim="verdict-shake"; burst(["🦴","🥱","🐢"],10); }
     else if (taps <= 20) { msg="meh... you can do better than that!"; color="#ff9800"; anim="verdict-pop"; burst(["😐","👟"],10); }
@@ -293,20 +300,23 @@
     verdictEl.style.color = color;
     verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
 
-    // Send to Telegram or show demo payload
+    // Try to send automatically
     if(inTelegram && tg && typeof tg.sendData === "function"){
       try {
         const dataString = JSON.stringify(payload);
         dlog('tg.sendData ->', dataString);
         tg.sendData(dataString);
         ok.style.display = "block";
-        tapBtn.textContent = "Submitted ✅";
-        // closing shortly after improves delivery on some clients
-        setTimeout(()=>{ try{ tg.close(); }catch(e){} }, 350);
       } catch(e){
         derr('tg.sendData error', e);
-        tapBtn.textContent = "Error submitting";
       }
+      // Show MainButton as a visible fallback for Telegram Desktop
+      if (hasMainButton) {
+        tg.MainButton.setParams({ text: 'Submit Score', is_active: true });
+        tg.MainButton.show();
+        dlog('MainButton shown as fallback');
+      }
+      // IMPORTANT: do NOT auto-close; let Desktop deliver the message.
     } else {
       ok.style.display = "block";
       ok.textContent = "Demo result: " + JSON.stringify(payload);
@@ -326,7 +336,7 @@
     if(!start){
       start = now;
       end = start + 5000;
-      tapBtn.textContent = "LET'S GO CHAMP!!!";
+      tapBtn.textContent = "LET'S GO CHAMP";
       dlog('run started', {coin_id, gid});
       tick();
     }
