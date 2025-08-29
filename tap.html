@@ -73,7 +73,7 @@
   .btn{
     display:block; width:100%; margin-top:16px; padding:18px 20px; font-size:22px; font-weight:800; letter-spacing:.3px;
     color:#121214; background:linear-gradient(180deg,var(--accent),var(--accent-2));
-    border:none; border-radius:16px; cursor:pointer; box-shadow:0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
+    border:none; border-radius:16px; cursor:pointer; box-shadow: 0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
   }
   .btn:active{transform:translateY(1px)}
 
@@ -196,8 +196,14 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   const inTelegram = !!tg;
   try { tg && tg.ready && tg.ready(); tg && tg.expand && tg.expand(); } catch(e){}
-
   dlog('WebApp object:', !!tg, 'inTelegram:', inTelegram);
+  try {
+    if (tg) {
+      dlog('tg.platform:', tg.platform);
+      dlog('tg.colorScheme:', tg.colorScheme);
+      dlog('tg.initDataUnsafe keys:', Object.keys(tg.initDataUnsafe || {}));
+    }
+  } catch(e){}
 
   const params = new URLSearchParams(location.search);
   const coin_id = params.get("coin_id") || "DEMO";
@@ -295,7 +301,7 @@
         tg.sendData(dataString);
         ok.style.display = "block";
         tapBtn.textContent = "Submitted ✅";
-        // optional: close after a short delay to ensure delivery
+        // closing shortly after improves delivery on some clients
         setTimeout(()=>{ try{ tg.close(); }catch(e){} }, 350);
       } catch(e){
         derr('tg.sendData error', e);
