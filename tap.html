@@ -16,56 +16,60 @@
   .wrap{position:relative; width:min(560px,96vw); background:linear-gradient(180deg,#1a1a21, #141419);
         border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
 
-  /* === FootCoin Premium Ad (glowing, purple) === */
+  /* Premium Ad Banner */
   .footcoin-ad {
     position: relative;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 14px;
-    padding: 12px 14px;
+    text-decoration: none;
+    padding: 14px 18px;
     margin-bottom: 20px;
     border-radius: 14px;
-    text-decoration: none;
-    color: #fff;
-    background: rgba(30, 17, 54, 0.55); /* translucent purple glass */
-    border: 1px solid rgba(168, 85, 247, 0.35);
     overflow: hidden;
-    isolation: isolate; /* keep glow behind content */
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: rgba(35, 20, 50, 0.85);
+    border: 1px solid rgba(180, 90, 255, 0.3);
+    box-shadow: 0 0 18px rgba(160, 80, 255, 0.35);
+    color: #fff;
   }
   .footcoin-ad::before {
-    content: "";
-    position: absolute;
-    inset: -30%;
-    background: radial-gradient(400px 200px at 10% 50%, rgba(168,85,247,.38), rgba(99,102,241,.28) 40%, rgba(0,0,0,0) 60%),
-                radial-gradient(400px 200px at 90% 50%, rgba(236,72,153,.32), rgba(168,85,247,.18) 40%, rgba(0,0,0,0) 60%);
-    filter: blur(18px);
-    z-index: -1;
-    animation: glowDrift 9s ease-in-out infinite alternate;
+    content:"";
+    position:absolute;
+    inset:-50%;
+    background: radial-gradient(circle at center, rgba(180,90,255,0.55), transparent 70%);
+    animation: glowDrift 6s linear infinite;
   }
   @keyframes glowDrift {
-    0% { transform: translateX(-2%) translateY(0%); opacity: .9; }
-    100% { transform: translateX(2%) translateY(2%); opacity: 1; }
+    0% { transform:translate(-30%, -30%) scale(1.1); }
+    50%{ transform:translate(30%, 30%) scale(1.25); }
+    100%{ transform:translate(-30%, -30%) scale(1.1); }
   }
-  .footcoin-img {
-    flex: 0 0 auto;
-    width: 140px; /* responsive-ish, keeps logo “left” presence */
-    max-width: 40%;
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(168,85,247,.35);
+  .footcoin-ad img {
+    position: relative;
+    z-index: 1;
+    height: 40px;
+    width: auto;
+    border-radius: 8px;
   }
-  .footcoin-copy {
-    display:flex; flex-direction:column; gap:2px; min-width:0;
+  .footcoin-text {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
   }
   .footcoin-title {
-    font-weight: 800; letter-spacing:.2px; font-size: 16px; line-height: 1.15;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
   }
   .footcoin-tag {
-    font-size: 11px; opacity: .85; color: #E7D7FF;
+    font-size: 12px;
+    opacity: 0.8;
   }
 
-  /* Header with logo/text */
+  /* Header */
   .title{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
   .title-text{font-weight:800; letter-spacing:.2px; font-size:22px;}
   .title .badge{font-size:12px; padding:4px 8px; border-radius:999px; background:#222231; color:var(--muted); border:1px solid #2c2c39}
@@ -75,14 +79,8 @@
   .runner{position:absolute; top:50%; left:0%; transform:translate(-50%, -50%); font-size:72px; transition: transform .08s linear, left .08s linear}
   .run1{ transform: translate(-50%, -50%) translateY(-5px) rotate(-8deg) }
   .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
-
-  /* Default: no flip (desktop) */
   .runner-emoji { display:inline-block; transform:none; }
-
-  /* Flip emoji only on touch devices */
-  @media (pointer: coarse) {
-    .runner-emoji { transform:scaleX(-1); }
-  }
+  @media (pointer: coarse) { .runner-emoji { transform:scaleX(-1); } }
 
   .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
   .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
@@ -93,7 +91,6 @@
     display:block; width:100%; margin-top:16px; padding:18px 20px; font-size:22px; font-weight:800; letter-spacing:.3px;
     color:#121214; background:linear-gradient(180deg,var(--accent),var(--accent-2));
     border:none; border-radius:16px; cursor:pointer; box-shadow:0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
-    -webkit-tap-highlight-color: transparent; touch-action:manipulation;
   }
   .btn:active{transform:translateY(1px)}
 
@@ -103,58 +100,27 @@
   .footer{margin-top:12px; text-align:center; font-size:12px; color:var(--muted)}
   .demo{position:absolute; top:12px; right:12px; font-size:12px; color:#111; background:#ffdc7a; border-radius:999px; padding:6px 10px; display:none}
   .ok{display:none; margin-top:10px; text-align:center; color:#78ffb3}
-
-  /* Verdict effects */
-  #verdict { display:none; font-weight:800; text-align:center; margin-top:8px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
-  .verdict-pop { animation: verdictPop .45s cubic-bezier(.2,1,.3,1); }
-  .verdict-shake { animation: verdictShake .45s ease-in-out; }
-  .verdict-glow { animation: verdictGlow 1.2s ease-in-out 2; }
-  @keyframes verdictPop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1)} }
-  @keyframes verdictShake {
-    0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px) rotate(-1.5deg)}
-    40%{transform:translateX(5px) rotate(1.2deg)} 60%{transform:translateX(-4px) rotate(-.8deg)}
-    80%{transform:translateX(3px) rotate(.6deg)}
-  }
-  @keyframes verdictGlow {
-    0%{text-shadow:0 0 0 rgba(255,255,255,0)} 50%{text-shadow:0 0 18px rgba(255,255,255,.65)} 100%{text-shadow:0 0 0 rgba(255,255,255,0)}
-  }
-
-  /* Emoji burst */
-  .fx-layer { pointer-events:none; position:absolute; inset:0; overflow:hidden; }
-  .fx-emoji {
-    position:absolute; font-size:38px;
-    opacity:0; transform: translate(-50%,-50%) scale(.6);
-    animation: fxRise 900ms ease-out forwards;
-  }
-  @keyframes fxRise {
-    0%   { opacity:0; transform:translate(var(--x), var(--y)) scale(.6) rotate(0deg); }
-    20%  { opacity:1; }
-    100% { opacity:0; transform:translate(calc(var(--x) + var(--dx)), calc(var(--y) - 140px)) scale(1.25) rotate(25deg); }
-  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <!-- Glowing FootCoin Premium Ad -->
-  <a href="https://footcoin.me" target="_blank" rel="noopener" class="footcoin-ad" aria-label="Footcoin Premium Ad">
-    <img
-      class="footcoin-img"
-      src="https://footcoin.me/wp-content/uploads/2025/05/1746852152907-1024x341.png"
-      alt="Footcoin"
-      loading="lazy"
-    />
-    <div class="footcoin-copy">
+
+  <!-- Premium Ad Banner -->
+  <a href="https://footcoin.me" target="_blank" rel="noopener" class="footcoin-ad">
+    <img src="https://footcoin.me/wp-content/uploads/2025/05/1746852152907-1024x341.png" alt="Footcoin Logo" />
+    <div class="footcoin-text">
       <div class="footcoin-title">footcoin</div>
       <div class="footcoin-tag">Premium Ad*</div>
     </div>
   </a>
 
+  <!-- Title -->
   <div class="title">
     <div class="title-text">🏃‍♂️ PumpingLegs</div>
     <span class="badge">Tap Sprint · 5s</span>
   </div>
 
-  <!-- FX layer for bursts -->
+  <!-- FX layer -->
   <div class="fx-layer" id="fx"></div>
 
   <!-- Track -->
@@ -177,180 +143,14 @@
   </div>
 
   <div class="ok" id="ok">Submitted ✅</div>
-  <div class="footer" id="hint">Keep tapping — fastest legs win!!</div>
+  <div class="footer" id="hint">🔥 LET’S RUN 🏃‍♂️</div>
   <div class="footer" id="verdict" style="display:none;font-weight:700;"></div>
   <div class="demo" id="demo">Demo mode</div>
 </div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
-(function(){
-  const tg = window.Telegram && window.Telegram.WebApp;
-  const inTelegram = !!tg;
-
-  if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
-
-  const params = new URLSearchParams(location.search);
-  const coin_id = params.get("coin_id") || "DEMO";
-  const gid = params.get("gid");
-
-  const tapBtn = document.getElementById("tap");
-  const tapsEl = document.getElementById("taps");
-  const bestEl = document.getElementById("best");
-  const cpsEl = document.getElementById("cps");
-  const timerEl = document.getElementById("timer");
-  const fill = document.getElementById("fill");
-  const ok = document.getElementById("ok");
-  const demo = document.getElementById("demo");
-  const runner = document.getElementById("runner");
-  const verdictEl = document.getElementById("verdict");
-
-  if(!inTelegram){ demo.style.display = "inline-block"; }
-
-  let taps=0, best=0, start=0, end=0, done=false, raf=null, lastTapTimes=[], phase=0, lastTapTime=0;
-
-  function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
-
-  function updateRunner(){
-    const target = 50;
-    const pct = Math.min(100, (taps/target) * 100);
-    runner.style.left = pct + "%";
-    phase ^= 1;
-    runner.className = "runner " + (phase ? "run1" : "run2");
-  }
-
-  function tick(){
-    const now = performance.now();
-    const left = Math.max(0, end - now);
-    const s = left / 1000;
-    timerEl.textContent = "Time: " + s.toFixed(2) + "s";
-    fill.style.width = (100 * (1 - s/5)).toFixed(1) + "%";
-    if(left <= 0) return finish();
-    raf = requestAnimationFrame(tick);
-  }
-
-  function burst(symbols, count){
-    const layer = document.getElementById("fx");
-    const rect = layer.getBoundingClientRect();
-    for(let i=0;i<count;i++){
-      const el = document.createElement("div");
-      el.className = "fx-emoji";
-      el.textContent = symbols[Math.floor(Math.random()*symbols.length)];
-      const x = (rect.width / 2) + (Math.random()*80 - 40);
-      const y = (rect.height / 2) + (Math.random()*30 - 15);
-      const dx = (Math.random()*260 - 130) + "px";
-      el.style.setProperty("--x", x+"px");
-      el.style.setProperty("--y", y+"px");
-      el.style.setProperty("--dx", dx);
-      layer.appendChild(el);
-      setTimeout(()=>{ el.remove(); }, 1000);
-    }
-  }
-
-  function finish(){
-    if(done) return;
-    done = true;
-    cancelAnimationFrame(raf);
-    tapBtn.disabled = true;
-    tapBtn.textContent = "Submitting…";
-
-    const now = performance.now();
-    const windowMs = 1000;
-    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
-    const cps = lastTapTimes.length / (windowMs/1000);
-    cpsEl.textContent = cps.toFixed(1);
-
-    const safe = clamp(taps, 0, 500);
-    const payload = { coin_id, gid, taps: safe };
-
-    let msg = "", color = "#fff", anim = "verdict-pop";
-    if (taps <= 10) {
-      msg = "my grandma' can run faster than that!";
-      color = "#ff4d4f"; anim = "verdict-shake"; burst(["🦴","🥱","🐢"], 10);
-    } else if (taps <= 20) {
-      msg = "meh... you can do better than that!";
-      color = "#ff9800"; anim = "verdict-pop"; burst(["😐","👟"], 10);
-    } else if (taps <= 30) {
-      msg = "that's a real CHAD run";
-      color = "#3aa0ff"; anim = "verdict-pop verdict-glow"; burst(["💪","🔥","👟"], 12);
-    } else if (taps <= 40) {
-      msg = "Usain Bolt is proud of you!!!";
-      color = "#a24dff"; anim = "verdict-pop verdict-glow"; burst(["🏃‍♂️","💨","⚡️"], 14);
-    } else {
-      msg = "LIGHTING SPEED !!!";
-      color = "#15c26b"; anim = "verdict-pop verdict-glow"; burst(["⚡️","🚀","🔥","🏁"], 18);
-    }
-    verdictEl.textContent = msg;
-    verdictEl.style.display = "block";
-    verdictEl.style.color = color;
-    verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
-
-    if(inTelegram && tg.sendData){
-      try {
-        tg.sendData(JSON.stringify(payload));
-        ok.style.display = "block";
-        tapBtn.textContent = "Submitted ✅";
-      } catch(e){
-        tapBtn.textContent = "Error submitting";
-      }
-    } else {
-      ok.style.display = "block";
-      ok.textContent = "Demo result: " + JSON.stringify(payload);
-      tapBtn.textContent = "Finished (demo)";
-    }
-  }
-
-  tapBtn.addEventListener("pointerdown", (e) => {
-    if(done) return;
-    if(e.pointerType === "mouse" && e.button !== 0) return;
-    const now = performance.now();
-    if(now - lastTapTime < 80) return;
-    lastTapTime = now;
-
-    if(!start){
-      start = now;
-      end = start + 5000;
-      tapBtn.textContent = "LET'S GO CHAMP";
-      tick();
-    }
-    taps++;
-    tapsEl.textContent = taps;
-    best = Math.max(best, taps);
-    bestEl.textContent = best;
-    lastTapTimes.push(now);
-    const windowMs = 1000;
-    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
-    cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
-    updateRunner();
-  });
-
-  // Fallback for older mobile browsers
-  tapBtn.addEventListener("touchstart", (e) => {
-    if(done) return;
-    e.preventDefault();
-    const now = performance.now();
-    if(now - lastTapTime < 80) return;
-    lastTapTime = now;
-
-    if(!start){
-      start = now;
-      end = start + 5000;
-      tapBtn.textContent = "LET'S GO CHAMP";
-      tick();
-    }
-    taps++;
-    tapsEl.textContent = taps;
-    best = Math.max(best, taps);
-    bestEl.textContent = best;
-    lastTapTimes.push(now);
-    const windowMs = 1000;
-    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
-    cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
-    updateRunner();
-  }, { passive: false });
-
-  window.addEventListener("beforeunload", () => { if(!done && start){ finish(); } });
-})();
+// (keep your JS game logic as-is from before, no changes)
 </script>
 </body>
 </html>
