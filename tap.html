@@ -1,696 +1,314 @@
-import asyncio
-import logging
-import json
-import time
-import aiosqlite
-import aiohttp
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
-from aiogram.types import (
-    WebAppInfo,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    ChatMemberUpdated,
-)
-
-# ================== CONFIG ==================
-BOT_TOKEN = ""  # <--- put your token here
-GAME_URL      = "https://pumpinglegs.github.io/pumpinglegs-web./tap.html"
-LOGO_URL      = "https://raw.githubusercontent.com/pumpinglegs/pumpinglegs-web./refs/heads/main/logo.png"
-COOLDOWN_SEC  = 3600  # 1 hour per user+group+coin
-DB_FILE       = "legs.db"
-
-# Your trending channel (must have set the bot as an admin of the channel)
-TRENDING_CHAT = "-1003098054785"  # @PumpingLegsTrending
-# ============================================
-
-logging.basicConfig(level=logging.DEBUG)
-bot = Bot(BOT_TOKEN)
-dp = Dispatcher()
-
-# ---- Day boundary helper (UTC, no timezone issues) ----
-def day_midnight_epoch_utc() -> int:
-    """Unix timestamp for today's 00:00 UTC."""
-    return int(time.time() // 86400 * 86400)
-
-# --------- DB INIT ----------
-async def init_db():
-    async with aiosqlite.connect(DB_FILE) as db:
-        # core tables
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS runs (
-            user_id INTEGER,
-            chat_id INTEGER,
-            coin_id TEXT,
-            taps INTEGER,
-            ts INTEGER
-        )
-        """)
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS group_coins (
-            chat_id INTEGER PRIMARY KEY,
-            coin_id TEXT
-        )
-        """)
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS group_settings (
-            chat_id INTEGER PRIMARY KEY,
-            echo_enabled INTEGER DEFAULT 1
-        )
-        """)
-        # live scoreboard message per group
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS group_live (
-            chat_id INTEGER PRIMARY KEY,
-            message_id INTEGER
-        )
-        """)
-        # global coin registry (for market cap lookups)
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS coin_registry (
-            coin_id TEXT PRIMARY KEY,
-            chain   TEXT,
-            address TEXT,
-            symbol  TEXT
-        )
-        """)
-        # top-5 one-time announcements per day
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS top5_hits (
-            day_key TEXT,
-            coin_id TEXT,
-            PRIMARY KEY (day_key, coin_id)
-        )
-        """)
-        # NEW: one persistent leaderboard message in the trending channel
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS trending_live (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            message_id INTEGER
-        )
-        """)
-
-        # helpful indexes
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_runs_time ON runs(ts)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_runs_user_coin ON runs(user_id, coin_id, ts)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_runs_user_chat_coin_ts ON runs(user_id, chat_id, coin_id, ts)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_runs_coin_ts ON runs(coin_id, ts)")
-        await db.commit()
-
-# --------- HELPERS ----------
-def fmt_compact(n: int) -> str:
-    if n >= 1_000_000: return f"{n/1_000_000:.2f}M".rstrip('0').rstrip('.')
-    if n >= 1_000:     return f"{n/1_000:.2f}K".rstrip('0').rstrip('.')
-    return str(n)
-
-def fmt_money(n: float | int | None) -> str:
-    if not n or n <= 0: return "N/A"
-    n = float(n)
-    if n >= 1_000_000_000: return f"${n/1_000_000_000:.2f}B".rstrip('0').rstrip('.')
-    if n >= 1_000_000:     return f"${n/1_000_000:.2f}M".rstrip('0').rstrip('.')
-    if n >= 1_000:         return f"${n/1_000:.2f}K".rstrip('0').rstrip('.')
-    return f"${int(n)}"
-
-def medal_for(i: int) -> str:
-    return ["🥇", "🥈", "🥉", "🐆", "🐆"][i] if i < 5 else ""
-
-async def get_group_coin(chat_id: int) -> str | None:
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT coin_id FROM group_coins WHERE chat_id=?", (chat_id,)) as cur:
-            row = await cur.fetchone()
-            return row[0] if row else None
-
-async def get_echo_enabled(chat_id: int) -> bool:
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT echo_enabled FROM group_settings WHERE chat_id=?", (chat_id,)) as cur:
-            row = await cur.fetchone()
-            return bool(row[0]) if row else True
-
-async def set_echo_enabled(chat_id: int, enabled: bool):
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute(
-            "REPLACE INTO group_settings (chat_id, echo_enabled) VALUES (?, ?)",
-            (chat_id, 1 if enabled else 0)
-        )
-        await db.commit()
-
-# ---- cooldown per user + group + coin
-async def last_run_ts(user_id: int, chat_id: int, coin_id: str) -> int | None:
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute(
-            "SELECT ts FROM runs WHERE user_id=? AND chat_id=? AND coin_id=? ORDER BY ts DESC LIMIT 1",
-            (user_id, chat_id, coin_id)
-        ) as cur:
-            row = await cur.fetchone()
-            return row[0] if row else None
-
-async def can_run_now(user_id: int, chat_id: int, coin_id: str) -> tuple[bool, int]:
-    lr = await last_run_ts(user_id, chat_id, coin_id)
-    now = int(time.time())
-    if lr is None or now - lr >= COOLDOWN_SEC:
-        return True, 0
-    remaining = COOLDOWN_SEC - (now - lr)
-    return False, remaining
-
-def cooldown_msg(seconds: int) -> str:
-    mins = max(1, seconds // 60)
-    return f"🧊 Cool your legs, tireless runner! You have <b>{mins} minute(s)</b> left until next run."
-
-def sprint_kb(url: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="LETS RUN 🏃‍♂️", web_app=WebAppInfo(url=url))]]
-    )
-
-def dm_deeplink_kb(coin: str, chat_id: int | None = None) -> InlineKeyboardMarkup:
-    if hasattr(bot, "_me"): botname = bot._me.username
-    else:                   botname = "PumpingLegsBot"
-    start_param = f"sprint_{coin}" + (f"_{chat_id}" if chat_id else "")
-    deep = f"https://t.me/{botname}?start={start_param}"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="LETS RUN 🏃‍♂️", url=deep)]]
-    )
-
-# live message helpers (per group)
-async def get_live_msg_id(chat_id: int) -> int | None:
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT message_id FROM group_live WHERE chat_id=?", (chat_id,)) as cur:
-            row = await cur.fetchone()
-            return row[0] if row else None
-
-async def set_live_msg_id(chat_id: int, msg_id: int):
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("REPLACE INTO group_live (chat_id, message_id) VALUES (?, ?)", (chat_id, msg_id))
-        await db.commit()
-
-# trending channel live message helpers
-async def get_trending_msg_id() -> int | None:
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT message_id FROM trending_live WHERE id=1") as cur:
-            row = await cur.fetchone()
-            return row[0] if row else None
-
-async def set_trending_msg_id(msg_id: int):
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("REPLACE INTO trending_live (id, message_id) VALUES (1, ?)", (msg_id,))
-        await db.commit()
-
-async def coin_total_today(coin_id: str) -> int:
-    start_ts = day_midnight_epoch_utc()
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute(
-            "SELECT COALESCE(SUM(taps),0) FROM runs WHERE ts >= ? AND coin_id=?",
-            (start_ts, coin_id)
-        ) as cur:
-            row = await cur.fetchone()
-            return int(row[0] or 0)
-
-# ---------- Coin registry (global) ----------
-async def set_contract(coin_id: str, chain: str, address: str, symbol: str):
-    coin_id = coin_id.upper()
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("""
-        INSERT INTO coin_registry (coin_id, chain, address, symbol)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(coin_id) DO UPDATE SET chain=excluded.chain, address=excluded.address, symbol=excluded.symbol
-        """, (coin_id, chain.lower(), address, symbol.upper()))
-        await db.commit()
-
-async def get_contract(coin_id: str):
-    coin_id = coin_id.upper()
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT chain, address, symbol FROM coin_registry WHERE coin_id=?", (coin_id,)) as cur:
-            row = await cur.fetchone()
-            if row:
-                return {"chain": row[0], "address": row[1], "symbol": row[2]}
-            return None
-
-# ---------- Dexscreener (cached) ----------
-_dex_cache = {}  # key: address -> (fdv, ts)
-DEX_CACHE_SECONDS = 300
-
-async def dexscreener_fdv_by_address(address: str) -> float | None:
-    now = time.time()
-    if address in _dex_cache:
-        fdv, ts = _dex_cache[address]
-        if now - ts < DEX_CACHE_SECONDS:
-            return fdv
-
-    url = f"https://api.dexscreener.com/latest/dex/tokens/{address}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-    except Exception:
-        return None
-
-    pairs = data.get("pairs") or []
-    if not pairs:
-        _dex_cache[address] = (None, now)
-        return None
-
-    def liq(p):
-        try:
-            return float(p.get("liquidity", {}).get("usd", 0)) or 0.0
-        except Exception:
-            return 0.0
-
-    best = max(pairs, key=liq)
-    fdv = best.get("fdv")
-    try:
-        fdv = float(fdv) if fdv is not None else None
-    except Exception:
-        fdv = None
-
-    _dex_cache[address] = (fdv, now)
-    return fdv
-
-# ---------- Top-5 breakthrough tracking (UTC day key) ----------
-def utc_day_key() -> str:
-    return time.strftime("%Y-%m-%d", time.gmtime())
-
-async def already_announced_today(coin_id: str) -> bool:
-    day = utc_day_key()
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("SELECT 1 FROM top5_hits WHERE day_key=? AND coin_id=?", (day, coin_id)) as cur:
-            return (await cur.fetchone()) is not None
-
-async def mark_announced_today(coin_id: str):
-    day = utc_day_key()
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("INSERT OR IGNORE INTO top5_hits (day_key, coin_id) VALUES (?, ?)", (day, coin_id))
-        await db.commit()
-
-async def todays_top5() -> list[tuple[str, int]]:
-    start_ts = day_midnight_epoch_utc()
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("""
-            SELECT coin_id, SUM(taps) AS total
-            FROM runs
-            WHERE ts >= ?
-            GROUP BY coin_id
-            ORDER BY total DESC
-            LIMIT 5
-        """, (start_ts,)) as cur:
-            rows = await cur.fetchall()
-            logging.debug("Top 5 coins: %s", rows)
-            return [(r[0], int(r[1])) for r in rows]
-
-async def maybe_announce_top5_breakthrough(coin_id: str):
-    top5 = await todays_top5()
-    logging.debug("Top 5 check for %s -> %s", coin_id, top5)
-    in_top5 = any(c == coin_id for c, _ in top5)
-    if not in_top5:
-        return
-    if await already_announced_today(coin_id):
-        logging.debug("Coin %s already announced today", coin_id)
-        return
-
-    reg = await get_contract(coin_id)
-    mcap = None
-    sym = coin_id
-    if reg:
-        sym = reg.get("symbol") or coin_id
-        addr = reg.get("address")
-        mcap = await dexscreener_fdv_by_address(addr) if addr else None
-
-    total_today = next((t for c, t in top5 if c == coin_id), 0)
-
-    text = (
-        f"🥳 <b>{sym}</b> just sprinted into the <u>TOP 5</u>! 🚀🔥\n"
-        f"💰 Market Cap: {fmt_money(mcap)}\n"
-        f"🏃 Current Score: <b>{fmt_compact(total_today)}</b> steps\n"
-        f"Keep running to climb higher!"
-    )
-    try:
-        await bot.send_message(TRENDING_CHAT, text, parse_mode="HTML")
-        await mark_announced_today(coin_id)
-    except Exception as e:
-        logging.error("Failed to post to TRENDING_CHAT: %s, chat_id: %s", e, TRENDING_CHAT)
-
-# ---------- Trending Channel Leaderboard (live single message) ----------
-async def build_leaderboard_text() -> str:
-    start_ts = day_midnight_epoch_utc()
-    async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute("""
-            SELECT coin_id, SUM(taps) AS total, COUNT(*) as runs
-            FROM runs
-            WHERE ts >= ?
-            GROUP BY coin_id
-            ORDER BY total DESC
-            LIMIT 15
-        """, (start_ts,)) as cur:
-            rows = await cur.fetchall()
-
-    if not rows:
-        return "🏆 <b>PumpingLegs — Today (Trending Top 15)</b>\n\n📉 No runs yet today..."
-
-    lines = ["🏆 <b>PumpingLegs — Today (Trending Top 15)</b>"]
-    for idx, (coin, total, runs) in enumerate(rows, start=1):
-        icon = medal_for(idx-1)
-        total_s = fmt_compact(int(total))
-        if idx <= 5:
-            lines.append(f"{icon} <b>{coin}</b> | {total_s} | {runs} 🏃‍♂️")
-        else:
-            lines.append(f"{idx}. {coin} | {total_s} | {runs} 🏃‍♂️")
-    return "\n".join(lines)
-
-async def update_trending_leaderboard():
-    text = await build_leaderboard_text()
-    msg_id = await get_trending_msg_id()
-    try:
-        if msg_id:
-            try:
-                await bot.edit_message_text(
-                    chat_id=TRENDING_CHAT,
-                    message_id=msg_id,
-                    text=text,
-                    parse_mode="HTML"
-                )
-                logging.debug("Trending leaderboard edited (msg_id=%s).", msg_id)
-                return
-            except Exception as e:
-                logging.warning("Trending edit failed, sending new: %s", e)
-        sent = await bot.send_message(TRENDING_CHAT, text, parse_mode="HTML")
-        await set_trending_msg_id(sent.message_id)
-        logging.debug("Trending leaderboard sent (msg_id=%s).", sent.message_id)
-    except Exception as e:
-        logging.error("Failed to update trending leaderboard: %s", e)
-
-# --------- BOT ADDED TO GROUP (Welcome) ----------
-@dp.my_chat_member(F.chat.type.in_({"group", "supergroup"}))
-async def on_added_to_group(ev: ChatMemberUpdated):
-    if ev.new_chat_member.status in {"member", "administrator"}:
-        await set_echo_enabled(ev.chat.id, True)
-
-        url = f"{GAME_URL}?coin_id=DEMO&gid={ev.chat.id}"
-        kb = sprint_kb(url)
-
-        caption = (
-            "👋 Thanks for adding me!\n\n"
-            "<b>PumpingLegs</b> 🦵 is ready here.\n\n"
-            "📌 What you can do:\n"
-            "• /setcoin <code>COIN</code> — bind a coin to this group\n"
-            "• /sprint — run the 5-second sprint for your coin\n"
-            "• /leaderboard — see today’s Top 15 coins (resets daily)\n"
-            "• /echo_off — mute group result messages\n\n"
-            "🔥 LET’S RUN 🏃‍♂️"
-        )
-
-        try:
-            await bot.send_photo(ev.chat.id, LOGO_URL, caption=caption, parse_mode="HTML", reply_markup=kb)
-        except Exception:
-            await bot.send_message(ev.chat.id, caption, parse_mode="HTML", reply_markup=kb)
-        logging.debug("Welcome message sent to group %s", ev.chat.id)
-
-# --------- /start ----------
-@dp.message(Command("start"))
-async def cmd_start(m: types.Message):
-    args = (m.text or "").split(maxsplit=1)
-    coin = None
-    gid = None
-
-    # supports: /start sprint_COIN  or  /start sprint_COIN_CHATID
-    if len(args) == 2 and args[1].lower().startswith("sprint_"):
-        parts = args[1].split("_", 2)  # ["sprint", "COIN", "CHATID?"]
-        if len(parts) >= 2:
-            coin = parts[1].upper()
-        if len(parts) == 3:
-            try:
-                gid = int(parts[2])
-            except Exception:
-                gid = None
-
-    if coin and gid:
-        url = f"{GAME_URL}?coin_id={coin}&gid={gid}"
-    elif coin:
-        url = f"{GAME_URL}?coin_id={coin}"
-    else:
-        url = GAME_URL
-
-    kb = sprint_kb(url)
-    caption = (
-        "Welcome to <b>PumpingLegs</b> 🦵\n"
-        "• /sprint – play the 5s tap sprint\n"
-        "• /leaderboard – today’s Top 15 coins\n"
-        "• /ping – check bot is alive\n\n"
-        "<b>Group admins</b>:\n"
-        "• /setcoin <code>COIN</code>\n"
-        "• /coin, /clearcoin, /echo_on, /echo_off\n\n"
-        "🔥 LET’S RUN 🏃‍♂️"
-    )
-    try:
-        await m.answer_photo(LOGO_URL, caption=caption, parse_mode="HTML", reply_markup=kb)
-    except Exception:
-        await m.answer(caption, parse_mode="HTML", reply_markup=kb)
-
-# --------- BASIC COMMANDS ----------
-@dp.message(Command("ping"))
-async def cmd_ping(m: types.Message):
-    await m.answer("pong ✅")
-
-@dp.message(Command("posttest"))
-async def cmd_posttest(m: types.Message):
-    try:
-        await bot.send_message(TRENDING_CHAT, "✅ Channel post test from bot.")
-        await m.answer("Sent a test message to the trending channel.")
-    except Exception as e:
-        await m.answer(f"Failed to post to channel: {e}")
-
-# Manual refresh of channel leaderboard (DM only, useful for testing)
-@dp.message(Command("forceboard"))
-async def cmd_forceboard(m: types.Message):
-    if m.chat.type != "private":
-        return await m.answer("Run this in DM.")
-    await update_trending_leaderboard()
-    await m.answer("Trending leaderboard refreshed.")
-
-# /sprint (group-safe with gid + DM fallback)
-@dp.message(Command("sprint"))
-async def cmd_sprint(m: types.Message):
-    coin = "DEMO"
-    if m.chat.type in ("group", "supergroup"):
-        gcoin = await get_group_coin(m.chat.id)
-        if gcoin:
-            coin = gcoin
-
-    if m.chat and m.chat.type in ("group", "supergroup"):
-        url = f"{GAME_URL}?coin_id={coin}&gid={m.chat.id}"
-
-        if hasattr(bot, "_me"):
-            botname = bot._me.username
-        else:
-            botname = "PumpingLegsBot"
-        deep = f"https://t.me/{botname}?start=sprint_{coin}_{m.chat.id}"
-
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="LETS RUN 🏃‍♂️", web_app=WebAppInfo(url=url))],
-            [InlineKeyboardButton(text="LETS RUN (DM) 🏃‍♂️", url=deep)]
-        ])
-
-        try:
-            await m.answer("LET'S SEE HOW FAST YOU CAN RUN!", reply_markup=kb)
-        except Exception as e:
-            logging.warning("Group WebApp button failed: %r", e)
-            kb_dm = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="LETS RUN (DM) 🏃‍♂️", url=deep)]
-            ])
-            await m.answer("This group doesn’t allow the WebApp button. Use the DM link:", reply_markup=kb_dm)
-        return
-
-    # DM
-    url = f"{GAME_URL}?coin_id={coin}"
-    await m.answer("LET'S SEE HOW FAST YOU CAN RUN!", reply_markup=sprint_kb(url))
-
-@dp.message(Command("setcoin"))
-async def cmd_setcoin(m: types.Message):
-    if m.chat.type not in ("group", "supergroup"):
-        return await m.answer("⚠️ Use this in a group.")
-    parts = (m.text or "").split(maxsplit=1)
-    if len(parts) < 2:
-        return await m.answer("Usage: /setcoin <COIN>")
-    coin = parts[1].upper()
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute(
-            "REPLACE INTO group_coins (chat_id, coin_id) VALUES (?, ?)",
-            (m.chat.id, coin)
-        )
-        await db.commit()
-    await m.answer(f"✅ This group now boosts <b>{coin}</b>", parse_mode="HTML")
-
-@dp.message(Command("coin"))
-async def cmd_coin(m: types.Message):
-    if m.chat.type not in ("group", "supergroup"):
-        return await m.answer("⚠️ Use this in a group.")
-    coin = await get_group_coin(m.chat.id)
-    if coin:
-        await m.answer(f"🔗 This group boosts <b>{coin}</b>", parse_mode="HTML")
-    else:
-        await m.answer("❌ No coin bound. Use /setcoin <COIN>")
-
-@dp.message(Command("clearcoin"))
-async def cmd_clearcoin(m: types.Message):
-    if m.chat.type not in ("group", "supergroup"):
-        return await m.answer("⚠️ Use this in a group.")
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("DELETE FROM group_coins WHERE chat_id=?", (m.chat.id,))
-        await db.commit()
-    await m.answer("🗑️ Coin binding cleared.")
-
-@dp.message(Command("echo_on"))
-async def cmd_echo_on(m: types.Message):
-    if m.chat.type not in ("group", "supergroup"):
-        return await m.answer("⚠️ Use this in a group.")
-    await set_echo_enabled(m.chat.id, True)
-    await m.answer("🔊 Result echo is now <b>ON</b>.", parse_mode="HTML")
-
-@dp.message(Command("echo_off"))
-async def cmd_echo_off(m: types.Message):
-    if m.chat.type not in ("group", "supergroup"):
-        return await m.answer("⚠️ Use this in a group.")
-    await set_echo_enabled(m.chat.id, False)
-    await m.answer("🔇 Result echo is now <b>OFF</b>.", parse_mode="HTML")
-
-# Register contract for a coin (one-time, any admin)
-@dp.message(Command("setcontract"))
-async def cmd_setcontract(m: types.Message):
-    # Usage: /setcontract COIN CHAIN TOKEN_ADDRESS SYMBOL
-    parts = (m.text or "").split()
-    if len(parts) < 5:
-        return await m.answer("Usage: /setcontract <COIN> <CHAIN> <TOKEN_ADDRESS> <SYMBOL>")
-    coin, chain, address, symbol = parts[1].upper(), parts[2].lower(), parts[3], parts[4].upper()
-    await set_contract(coin, chain, address, symbol)
-    await m.answer(f"✅ Registered contract for <b>{coin}</b> on <b>{chain}</b>.", parse_mode="HTML")
-
-# --------- RECEIVE RESULTS ----------
-@dp.message(F.web_app_data)
-async def receive_data(m: types.Message):
-    logging.debug("🔍 Received message type: %s", type(m).__name__)
-    if not getattr(m, "web_app_data", None):
-        logging.debug("❌ No WebApp data in message")
-        return
-
-    try:
-        data = json.loads(m.web_app_data.data)
-        logging.debug(
-            "WEBAPP RESULT: user=%s coin=%s gid=%s taps=%s chat=%s",
-            m.from_user.id, data.get("coin_id"), data.get("gid"), data.get("taps"),
-            (m.chat.type if m.chat else None)
-        )
-        taps = int(data.get("taps", 0))
-        coin_id = (data.get("coin_id") or "DEMO").upper()
-        gid_raw = data.get("gid")
-        target_chat_id = None
-        try:
-            if gid_raw is not None:
-                target_chat_id = int(str(gid_raw))
-        except Exception as e:
-            logging.error("Invalid gid: %s, raw: %s", e, gid_raw)
-
-        now = int(time.time())
-
-        # binding override by group
-        if target_chat_id:
-            gcoin = await get_group_coin(target_chat_id)
-            if gcoin:
-                coin_id = gcoin
-        elif m.chat and m.chat.type in ("group", "supergroup"):
-            gcoin = await get_group_coin(m.chat.id)
-            if gcoin:
-                coin_id = gcoin
-
-        # effective chat for cooldown and storage
-        effective_chat_id = target_chat_id if target_chat_id else (m.chat.id if m.chat else 0)
-
-        # ---- COOLDOWN per user + group + coin
-        allowed, remaining = await can_run_now(m.from_user.id, effective_chat_id, coin_id)
-        if not allowed:
-            return await m.answer(cooldown_msg(remaining), parse_mode="HTML")
-
-        # ---- STORE RUN
-        async with aiosqlite.connect(DB_FILE) as db:
-            await db.execute(
-                "INSERT INTO runs (user_id, chat_id, coin_id, taps, ts) VALUES (?, ?, ?, ?, ?)",
-                (m.from_user.id, effective_chat_id, coin_id, taps, now)
-            )
-            await db.commit()
-        logging.debug("Test score stored: user=%s, chat=%s, coin=%s, taps=%s",
-                      m.from_user.id, effective_chat_id, coin_id, taps)
-
-        await m.answer(f"🏃 You tapped <b>{taps}</b> for <b>{coin_id}</b>!", parse_mode="HTML")
-
-        # Post every score to TRENDING_CHAT (optional)
-        try:
-            total_today = await coin_total_today(coin_id)
-            name = (m.from_user.full_name or "User").replace("<", "&lt;").replace(">", "&gt;")
-            text = (
-                f"🏁 <b>{name}</b> ran <b>{taps}</b> for <b>{coin_id}</b>!\n"
-                f"📊 <b>{coin_id}</b> total today: <b>{fmt_compact(total_today)}</b> 🏃‍♂️"
-            )
-            await bot.send_message(TRENDING_CHAT, text, parse_mode="HTML")
-            logging.debug("Posted to TRENDING_CHAT: %s", text)
-        except Exception as e:
-            logging.error("Failed to post to TRENDING_CHAT: %s, chat_id: %s", e, TRENDING_CHAT)
-
-        # ALWAYS-ON live scoreboard message in the originating group
-        if target_chat_id:
-            post_chat = target_chat_id
-        elif m.chat and m.chat.type in ("group", "supergroup"):
-            post_chat = m.chat.id
-        else:
-            post_chat = None
-
-        if post_chat:
-            total_today = await coin_total_today(coin_id)
-            name = (m.from_user.full_name or "User").replace("<", "&lt;").replace(">", "&gt;")
-            text = (
-                f"🏁 <b>{name}</b> ran <b>{taps}</b> for <b>{coin_id}</b>!\n"
-                f"📊 <b>{coin_id}</b> total today: <b>{fmt_compact(total_today)}</b> 🏃‍♂️"
-            )
-            live_id = await get_live_msg_id(post_chat)
-            try:
-                if live_id:
-                    await m.bot.edit_message_text(
-                        chat_id=post_chat,
-                        message_id=live_id,
-                        text=text,
-                        parse_mode="HTML"
-                    )
-                else:
-                    raise Exception("no live msg")
-            except Exception:
-                sent = await m.bot.send_message(post_chat, text, parse_mode="HTML")
-                await set_live_msg_id(post_chat, sent.message_id)
-
-        # Update the channel leaderboard message (this is the missing link!)
-        await update_trending_leaderboard()
-
-        # Top-5 breakthrough (UTC day)
-        await maybe_announce_top5_breakthrough(coin_id)
-
-    except Exception as e:
-        logging.error("Error in receive_data: %s, data: %s", e, getattr(m, "web_app_data", None))
-        await m.answer("⚠️ Error processing result: " + str(e))
-
-# --------- LEADERBOARD (Today, UTC) ----------
-@dp.message(Command("leaderboard"))
-async def cmd_leaderboard(m: types.Message):
-    # This replies wherever the command is used (DM or group). Channels can’t run commands.
-    text = await build_leaderboard_text()
-    await m.answer(text, parse_mode="HTML")
-
-# --------- MAIN ----------
-async def main():
-    await init_db()
-    try:
-        me = await bot.get_me()
-        bot._me = me
-        logging.info("Bot initialized: @%s", me.username)
-    except Exception:
-        pass
-    logging.info("Starting PumpingLegs bot...")
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-
-if __name__ == "__main__":
-    asyncio.run(main())
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>PumpingLegs — Tap Sprint</title>
+<meta name="theme-color" content="#0f0f12" />
+<style>
+  :root{ --bg:#0f0f12; --card:#16161b; --accent:#ff7a00; --accent-2:#ffa24c; --text:#f2f2f5; --muted:#b6b6c1; }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 600px at 50% -20%, #1e1e25 0, #0f0f12 60%);}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;color:var(--text);
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; overscroll-behavior:none; touch-action:manipulation;
+  }
+  .wrap{
+    position:relative; width:min(560px,96vw); background:linear-gradient(180deg,#1a1a21, #141419);
+    border:1px solid #252531; border-radius:22px; padding:24px 18px; box-shadow:0 20px 60px rgba(0,0,0,.45)
+  }
+
+  /* Premium banner: centered group with logo (left) + "Premium Ad*" (right) — pulsating gradient + glow */
+  .footcoin-ad{
+    position:relative; display:flex; align-items:center; justify-content:center;
+    gap:12px; text-decoration:none; padding:14px 18px; margin-bottom:20px; border-radius:14px; overflow:hidden;
+    background: linear-gradient(90deg, #8b5cf6, #ec4899);
+    background-size: 200% 100%;
+    color:#fff; border:1px solid rgba(255,255,255,.15);
+    box-shadow: 0 0 18px rgba(236,72,153,.45), 0 0 30px rgba(139,92,246,.35), inset 0 0 15px rgba(255,255,255,.1);
+    animation: bannerShift 6s ease-in-out infinite, bannerGlow 2.8s ease-in-out infinite;
+  }
+  @keyframes bannerShift {
+    0% { background-position: 0% 0; }
+    50% { background-position: 100% 0; }
+    100% { background-position: 0% 0; }
+  }
+  @keyframes bannerGlow {
+    0%,100% { box-shadow: 0 0 14px rgba(236,72,153,.35), 0 0 22px rgba(139,92,246,.28), inset 0 0 10px rgba(255,255,255,.08); }
+    50%     { box-shadow: 0 0 22px rgba(236,72,153,.55), 0 0 38px rgba(139,92,246,.45), inset 0 0 16px rgba(255,255,255,.12); }
+  }
+  .footcoin-ad img{
+    height:42px; width:auto; border-radius:8px; display:block;
+    filter: drop-shadow(0 3px 10px rgba(255,255,255,.25));
+  }
+  .footcoin-ad .label{
+    font-weight:800; font-size:13px; letter-spacing:.35px; white-space:nowrap; opacity:.95;
+    text-shadow: 0 1px 6px rgba(0,0,0,.35);
+  }
+  @media (max-width:360px){
+    .footcoin-ad{ gap:10px; padding:12px 14px; }
+    .footcoin-ad img{ height:36px; }
+    .footcoin-ad .label{ font-size:12px; }
+  }
+
+  /* Header */
+  .title{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+  .title-text{font-weight:800; letter-spacing:.2px; font-size:22px;}
+  .title .badge{font-size:12px; padding:4px 8px; border-radius:999px; background:#222231; color:var(--muted); border:1px solid #2c2c39}
+
+  .track{position:relative; height:92px; margin:14px 0 4px; border-radius:12px; overflow:hidden;
+         background:repeating-linear-gradient(90deg, #1c1c25 0 18px, #1a1a21 18px 36px); border:1px solid #2a2a36}
+  .runner{position:absolute; top:50%; left:0%; transform:translate(-50%, -50%); font-size:72px; transition: transform .08s linear, left .08s linear}
+  .run1{ transform: translate(-50%, -50%) translateY(-5px) rotate(-8deg) }
+  .run2{ transform: translate(-50%, -50%) translateY(5px) rotate(8deg) }
+  .runner-emoji{ display:inline-block; transform:none; }
+  @media (pointer:coarse){ .runner-emoji{ transform:scaleX(-1); } }
+
+  .meter{margin:6px 0 6px; font-size:44px; font-weight:900; text-align:center}
+  .sub{margin:-2px 0 12px; text-align:center; color:var(--muted)}
+  .bar{height:14px; width:100%; background:#1e1e28; border:1px solid #2a2a36; border-radius:999px; overflow:hidden}
+  .fill{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .08s linear}
+
+  .btn{
+    display:block; width:100%; margin-top:16px; padding:18px 20px; font-size:22px; font-weight:800; letter-spacing:.3px;
+    color:#121214; background:linear-gradient(180deg,var(--accent),var(--accent-2));
+    border:none; border-radius:16px; cursor:pointer; box-shadow:0 10px 30px rgba(255,122,0,.35), inset 0 0 10px rgba(255,255,255,.15);
+  }
+  .btn:active{transform:translateY(1px)}
+
+  .row{display:flex; gap:10px; margin-top:12px}
+  .pill{flex:1; text-align:center; background:#191926; border:1px solid #252536; padding:10px 12px; border-radius:12px; color:var(--muted)}
+  .big{font-size:22px; font-weight:800; color:var(--text)}
+  .footer{margin-top:12px; text-align:center; font-size:12px; color:var(--muted)}
+  .demo{position:absolute; top:12px; right:12px; font-size:12px; color:#111; background:#ffdc7a; border-radius:999px; padding:6px 10px; display:none}
+  .ok{display:none; margin-top:10px; text-align:center; color:#78ffb3}
+
+  /* Verdict effects */
+  #verdict { display:none; font-weight:800; text-align:center; margin-top:8px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
+  .verdict-pop { animation: verdictPop .45s cubic-bezier(.2,1,.3,1); }
+  .verdict-shake { animation: verdictShake .45s ease-in-out; }
+  .verdict-glow { animation: verdictGlow 1.2s ease-in-out 2; }
+  @keyframes verdictPop { 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1)} }
+  @keyframes verdictShake {
+    0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px) rotate(-1.5deg)}
+    40%{transform:translateX(5px) rotate(1.2deg)} 60%{transform:translateX(-4px) rotate(-.8deg)}
+    80%{transform:translateX(3px) rotate(.6deg)}
+  }
+  @keyframes verdictGlow {
+    0%{text-shadow:0 0 0 rgba(255,255,255,0)} 50%{text-shadow:0 0 18px rgba(255,255,255,.65)} 100%{text-shadow:0 0 0 rgba(255,255,255,0)}
+  }
+
+  /* FX emoji burst */
+  .fx-layer { pointer-events:none; position:absolute; inset:0; overflow:hidden; }
+  .fx-emoji {
+    position:absolute; font-size:38px;
+    opacity:0; transform: translate(-50%,-50%) scale(.6);
+    animation: fxRise 900ms ease-out forwards;
+  }
+  @keyframes fxRise {
+    0%   { opacity:0; transform:translate(var(--x), var(--y)) scale(.6) rotate(0deg); }
+    20%  { opacity:1; }
+    100% { opacity:0; transform:translate(calc(var(--x) + var(--dx)), calc(var(--y) - 140px)) scale(1.25) rotate(25deg); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Premium Ad Banner -->
+  <a href="https://footcoin.me" target="_blank" rel="noopener" class="footcoin-ad">
+    <img src="https://footcoin.me/wp-content/uploads/2025/05/1746852152907-1024x341.png" alt="Footcoin" />
+    <span class="label">Premium Ad*</span>
+  </a>
+
+  <!-- Title -->
+  <div class="title">
+    <div class="title-text">🏃‍♂️ PumpingLegs</div>
+    <span class="badge">Tap Sprint · 5s</span>
+  </div>
+
+  <!-- FX layer -->
+  <div class="fx-layer" id="fx"></div>
+
+  <!-- Track -->
+  <div class="track">
+    <div class="runner" id="runner" aria-hidden="true">
+      <span class="runner-emoji">🦵</span>
+    </div>
+  </div>
+
+  <div id="taps" class="meter">0</div>
+  <div class="sub" id="timer">Time: 5.00s</div>
+
+  <div class="bar"><div class="fill" id="fill"></div></div>
+
+  <button id="tap" class="btn">TAP TO START</button>
+
+  <div class="row">
+    <div class="pill"><div class="big" id="best">0</div><div>Best (session)</div></div>
+    <div class="pill"><div class="big" id="cps">0</div><div>Taps/sec</div></div>
+  </div>
+
+  <div class="ok" id="ok">Submitted ✅</div>
+  <div class="footer" id="hint">🔥 LET’S RUN 🏃‍♂️</div>
+  <div class="footer" id="verdict" style="display:none;font-weight:700;"></div>
+  <div class="demo" id="demo">Demo mode</div>
+</div>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+(function(){
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const inTelegram = !!tg;
+  try { if (tg && tg.ready) tg.ready(); if (tg && tg.expand) tg.expand(); } catch(e){}
+
+  const params = new URLSearchParams(location.search);
+  const coin_id = params.get("coin_id") || "DEMO";
+  const gid = params.get("gid"); // may be null; we still send it if present
+
+  const tapBtn = document.getElementById("tap");
+  const tapsEl = document.getElementById("taps");
+  const bestEl = document.getElementById("best");
+  const cpsEl = document.getElementById("cps");
+  const timerEl = document.getElementById("timer");
+  const fill = document.getElementById("fill");
+  const ok = document.getElementById("ok");
+  const demo = document.getElementById("demo");
+  const runner = document.getElementById("runner");
+  const verdictEl = document.getElementById("verdict");
+
+  if(!inTelegram){ demo.style.display = "inline-block"; }
+
+  let taps = 0, best = 0, start = 0, end = 0, done = false, raf = null, lastTapTimes = [], phase = 0, lastTapTime = 0;
+
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+  function updateRunner(){
+    const target = 50; // ~50 taps to reach the end visually
+    const pct = Math.min(100, (taps/target) * 100);
+    runner.style.left = pct + "%";
+    phase ^= 1;
+    runner.className = "runner " + (phase ? "run1" : "run2");
+  }
+
+  function tick(){
+    const now = performance.now();
+    const left = Math.max(0, end - now);
+    const s = left / 1000;
+    timerEl.textContent = "Time: " + s.toFixed(2) + "s";
+    fill.style.width = (100 * (1 - s/5)).toFixed(1) + "%";
+    if(left <= 0) return finish();
+    raf = requestAnimationFrame(tick);
+  }
+
+  function burst(symbols, count){
+    const layer = document.getElementById("fx");
+    const rect = layer.getBoundingClientRect();
+    for(let i=0;i<count;i++){
+      const el = document.createElement("div");
+      el.className = "fx-emoji";
+      el.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+      const x = (rect.width / 2) + (Math.random()*80 - 40);
+      const y = (rect.height / 2) + (Math.random()*30 - 15);
+      const dx = (Math.random()*260 - 130) + "px";
+      el.style.setProperty("--x", x+"px");
+      el.style.setProperty("--y", y+"px");
+      el.style.setProperty("--dx", dx);
+      layer.appendChild(el);
+      setTimeout(()=>{ el.remove(); }, 1000);
+    }
+  }
+
+  function finish(){
+    if(done) return;
+    done = true;
+    if (raf) cancelAnimationFrame(raf);
+    tapBtn.disabled = true;
+    tapBtn.textContent = "Submitting…";
+
+    // CPS window
+    const now = performance.now();
+    const windowMs = 1000;
+    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
+    const cps = lastTapTimes.length / (windowMs/1000);
+    cpsEl.textContent = cps.toFixed(1);
+
+    const safe = clamp(taps, 0, 500);
+    const payload = { coin_id, taps: safe };
+    if (gid != null) payload.gid = gid;
+
+    // Verdict + effects
+    let msg = "", color = "#fff", anim = "verdict-pop";
+    if (taps <= 10) {
+      msg = "my grandma' can run faster than that!";
+      color = "#ff4d4f"; anim = "verdict-shake"; burst(["🦴","🥱","🐢"], 10);
+    } else if (taps <= 20) {
+      msg = "meh... you can do better than that!";
+      color = "#ff9800"; anim = "verdict-pop"; burst(["😐","👟"], 10);
+    } else if (taps <= 30) {
+      msg = "that's a real CHAD run";
+      color = "#3aa0ff"; anim = "verdict-pop verdict-glow"; burst(["💪","🔥","👟"], 12);
+    } else if (taps <= 40) {
+      msg = "Usain Bolt is proud of you!!!";
+      color = "#a24dff"; anim = "verdict-pop verdict-glow"; burst(["🏃‍♂️","💨","⚡️"], 14);
+    } else {
+      msg = "LIGHTING SPEED !!!";
+      color = "#15c26b"; anim = "verdict-pop verdict-glow"; burst(["⚡️","🚀","🔥","🏁"], 18);
+    }
+    verdictEl.textContent = msg;
+    verdictEl.style.display = "block";
+    verdictEl.style.color = color;
+    verdictEl.className = ""; void verdictEl.offsetWidth; verdictEl.className = anim;
+
+    // Send to Telegram or show demo payload
+    if(inTelegram && tg && typeof tg.sendData === "function"){
+      try {
+        console.log("[PumpingLegs] Sending:", payload);
+        tg.sendData(JSON.stringify(payload));
+        ok.style.display = "block";
+        tapBtn.textContent = "Submitted ✅";
+      } catch(e){
+        console.warn("sendData error", e);
+        tapBtn.textContent = "Error submitting";
+      }
+    } else {
+      ok.style.display = "block";
+      ok.textContent = "Demo result: " + JSON.stringify(payload);
+      tapBtn.textContent = "Finished (demo)";
+    }
+  }
+
+  // Use pointerdown (works for mouse + touch) to avoid double events
+  tapBtn.addEventListener("pointerdown", (e) => {
+    if(done) return;
+    if(e.pointerType === "mouse" && e.button !== 0) return; // only left click
+    const now = performance.now();
+    if(now - lastTapTime < 80) return; // simple debounce
+    lastTapTime = now;
+
+    if(!start){
+      start = now;
+      end = start + 5000;
+      tapBtn.textContent = "LET'S GO CHAMP";
+      tick();
+    }
+    taps++;
+    tapsEl.textContent = taps;
+    best = Math.max(best, taps);
+    bestEl.textContent = best;
+
+    lastTapTimes.push(now);
+    const windowMs = 1000;
+    lastTapTimes = lastTapTimes.filter(t => now - t <= windowMs);
+    cpsEl.textContent = (lastTapTimes.length / (windowMs/1000)).toFixed(1);
+
+    updateRunner();
+  });
+
+  // Safety: if user closes the webview mid-run, auto-finish once
+  window.addEventListener("beforeunload", () => { if(!done && start){ finish(); } });
+})();
+</script>
+</body>
+</html>
